@@ -1,6 +1,6 @@
 import { RuneAI } from "./ai.js";
 import { RuneBoard } from "./board.js";
-import { DROP_SPEED } from "./constants.js";
+import { DROP_SPEED, OVERFLOW_DAMAGE } from "./constants.js";
 import { RunePiece, randomRunePair } from "./pieces.js";
 import { applyDamage, applyIncomingAttack, castSpell, createFighter } from "./spells.js";
 
@@ -149,7 +149,7 @@ export class RuneRivalsGame {
         await wait(230);
       },
       onClear: async (groups, combo) => {
-        for (const group of groups) this.castForSide(side, group.type, combo);
+        for (const group of groups) this.castForSide(side, group.type, combo, group.cells.length);
         this.ui.render(this);
         await wait(150);
       }
@@ -168,12 +168,12 @@ export class RuneRivalsGame {
     this.lockPiece("enemy");
   }
 
-  castForSide(side, type, combo) {
+  castForSide(side, type, combo, matchSize = 3) {
     const caster = this.getFighter(side);
     const target = this.getFighter(this.otherSide(side));
     const casterBoard = this.getBoard(side);
     const targetBoard = this.getBoard(this.otherSide(side));
-    const result = castSpell(type, combo, caster, target, casterBoard, targetBoard);
+    const result = castSpell(type, combo, caster, target, casterBoard, targetBoard, matchSize);
     this.ui.showSpell(side, result);
     if (result.overflowed) this.handleOverflow(this.otherSide(side));
 
@@ -185,7 +185,7 @@ export class RuneRivalsGame {
 
   handleOverflow(side) {
     const fighter = this.getFighter(side);
-    applyDamage(fighter, 20);
+    applyDamage(fighter, OVERFLOW_DAMAGE);
     this.getBoard(side).clearTopRows(3);
     this.ui.showSpell(side, { type: "shadow", label: "BOARD BREACH!", combo: 1 });
   }
@@ -208,9 +208,10 @@ export class RuneRivalsGame {
     const overflowed = applyIncomingAttack(attack, this.player, this.playerBoard);
     if (overflowed) this.handleOverflow("player");
     this.ui.showSpell("enemy", {
-      type: attack.kind === "damage" ? "fire" : attack.kind === "curse" ? "shadow" : "lightning",
-      label: attack.kind === "curse" ? "CURSE!" : attack.kind === "lightning" ? "CHAIN BOLT!" : "FIREBALL!",
-      combo: 1
+      type: attack.type ?? (attack.kind === "curse" ? "shadow" : attack.kind === "lightning" ? "lightning" : "fire"),
+      label: attack.type ? `${attack.type.toUpperCase()} SURGE!` : attack.kind === "curse" ? "CURSE!" : attack.kind === "lightning" ? "CHAIN BOLT!" : "FIREBALL!",
+      combo: 1,
+      matchSize: 3
     });
     this.checkGameOver();
   }

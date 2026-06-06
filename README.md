@@ -10,6 +10,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Six distinct rune types plus junk tiles
 - Orthogonal match-3 groups, gravity, and chain combos
 - Fireball, Cleanse, Stone Shield, Gust, Chain Bolt, and Curse spells
+- Faster battles with offensive pressure on every spell, stronger large groups, and steep combo scaling
 - HP, shields, board-overflow penalties, victory, defeat, pause, and rematch
 - AI that scores possible placements and prefers immediate matches
 - Local debug duel; press `Tab` to swap the controlled board

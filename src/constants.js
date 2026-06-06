@@ -1,6 +1,7 @@
 export const BOARD_WIDTH = 8;
 export const BOARD_HEIGHT = 14;
 export const STARTING_HP = 100;
+export const OVERFLOW_DAMAGE = 25;
 export const DROP_SPEED = 720;
 export const SOFT_DROP_SPEED = 55;
 export const LOCK_DELAY = 250;
@@ -23,16 +24,23 @@ export const RUNE_DATA = {
 };
 
 export const SPELL_VALUES = {
-  fireDamage: 6,
-  waterCleanse: 2,
-  earthShield: 6,
-  lightningDamage: 3,
-  lightningJunk: 1,
-  shadowJunk: 2
+  fireDamage: 12,
+  waterCleanse: 4,
+  earthShield: 8,
+  airClear: 1,
+  utilityDamage: 4,
+  lightningDamage: 7,
+  lightningJunk: 2,
+  shadowDamage: 5,
+  shadowJunk: 3
 };
 
 export function comboMultiplier(combo) {
-  if (combo >= 3) return 2;
-  if (combo === 2) return 1.5;
+  if (combo >= 3) return 2.7;
+  if (combo === 2) return 1.8;
   return 1;
+}
+
+export function matchSizeMultiplier(size = 3) {
+  return 1 + Math.max(0, size - 3) * 0.35;
 }

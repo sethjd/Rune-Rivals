@@ -1,4 +1,4 @@
-const CACHE_NAME = "rune-rivals-v3";
+const CACHE_NAME = "rune-rivals-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -23,6 +23,8 @@ const APP_SHELL = [
   "./assets/icons/app-icon-512.png",
   "./assets/icons/app-icon-maskable-192.png",
   "./assets/icons/app-icon-maskable-512.png",
+  "./assets/portraits/lyra.svg",
+  "./assets/portraits/kael.svg",
   "./assets/runes/fire.svg",
   "./assets/runes/water.svg",
   "./assets/runes/earth.svg",
@@ -30,7 +32,12 @@ const APP_SHELL = [
   "./assets/runes/lightning.svg",
   "./assets/runes/shadow.svg",
   "./assets/runes/junk.svg",
-  "./assets/backgrounds/duel-arena.svg"
+  "./assets/backgrounds/duel-arena.svg",
+  "./assets/spells/fireball.svg",
+  "./assets/spells/cleanse.svg",
+  "./assets/spells/shield.svg",
+  "./assets/spells/lightning.svg",
+  "./assets/spells/curse.svg"
 ];
 
 self.addEventListener("install", (event) => {

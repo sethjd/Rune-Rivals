@@ -1,4 +1,4 @@
-import { comboMultiplier, RUNE_DATA, SPELL_VALUES } from "./constants.js";
+import { comboMultiplier, matchSizeMultiplier, RUNE_DATA, SPELL_VALUES } from "./constants.js";
 
 export function createFighter(name) {
   return {
@@ -16,34 +16,43 @@ export function applyDamage(fighter, amount) {
   return amount - blocked;
 }
 
-export function castSpell(type, combo, caster, target, casterBoard, targetBoard) {
-  const multiplier = comboMultiplier(combo);
+export function castSpell(type, combo, caster, target, casterBoard, targetBoard, matchSize = 3) {
+  const multiplier = comboMultiplier(combo) * matchSizeMultiplier(matchSize);
   const result = {
     type,
     combo,
+    matchSize,
+    power: multiplier,
     label: RUNE_DATA[type]?.spell ?? "RUNE SURGE!",
     attack: null
   };
 
   switch (type) {
     case "fire":
-      result.attack = { kind: "damage", amount: Math.round(SPELL_VALUES.fireDamage * multiplier) };
+      result.attack = { kind: "damage", type, amount: Math.round(SPELL_VALUES.fireDamage * multiplier) };
       applyDamage(target, result.attack.amount);
       break;
     case "water":
       result.amount = casterBoard.removeJunk(Math.ceil(SPELL_VALUES.waterCleanse * multiplier));
+      result.attack = { kind: "damage", type, amount: Math.round(SPELL_VALUES.utilityDamage * multiplier) };
+      applyDamage(target, result.attack.amount);
       break;
     case "earth":
       result.amount = Math.round(SPELL_VALUES.earthShield * multiplier);
       caster.shield += result.amount;
+      result.attack = { kind: "damage", type, amount: Math.round(SPELL_VALUES.utilityDamage * multiplier) };
+      applyDamage(target, result.attack.amount);
       break;
     case "air":
-      result.amount = Math.max(1, Math.floor(multiplier));
+      result.amount = Math.max(1, Math.ceil(SPELL_VALUES.airClear * multiplier));
       for (let i = 0; i < result.amount; i += 1) casterBoard.removeHighestTile();
+      result.attack = { kind: "damage", type, amount: Math.round(SPELL_VALUES.utilityDamage * multiplier) };
+      applyDamage(target, result.attack.amount);
       break;
     case "lightning":
       result.attack = {
         kind: "lightning",
+        type,
         damage: Math.round(SPELL_VALUES.lightningDamage * multiplier),
         junk: Math.max(1, Math.round(SPELL_VALUES.lightningJunk * multiplier))
       };
@@ -53,8 +62,11 @@ export function castSpell(type, combo, caster, target, casterBoard, targetBoard)
     case "shadow":
       result.attack = {
         kind: "curse",
+        type,
+        damage: Math.round(SPELL_VALUES.shadowDamage * multiplier),
         junk: Math.round(SPELL_VALUES.shadowJunk * multiplier)
       };
+      applyDamage(target, result.attack.damage);
       target.junkQueue += result.attack.junk;
       break;
     default:
@@ -72,6 +84,9 @@ export function applyIncomingAttack(attack, fighter, board) {
     applyDamage(fighter, attack.damage);
     overflowed = board.addJunk(attack.junk);
   }
-  if (attack.kind === "curse") fighter.junkQueue += attack.junk;
+  if (attack.kind === "curse") {
+    applyDamage(fighter, attack.damage ?? 0);
+    fighter.junkQueue += attack.junk;
+  }
   return overflowed;
 }

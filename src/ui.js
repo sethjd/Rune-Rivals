@@ -8,6 +8,8 @@ export class GameUI {
     this.playerSpell = document.querySelector("#player-spell");
     this.enemySpell = document.querySelector("#enemy-spell");
     this.comboBanner = document.querySelector("#combo-banner");
+    this.battleEffect = document.querySelector("#battle-effect");
+    this.battleEffectImage = document.querySelector("#battle-effect-image");
     this.pauseOverlay = document.querySelector("#pause-overlay");
     this.makeBoardCells(this.playerBoard);
     this.makeBoardCells(this.enemyBoard);
@@ -72,7 +74,7 @@ export class GameUI {
   renderFighter(prefix, fighter) {
     const hpPercent = Math.max(0, fighter.hp);
     document.querySelector(`#${prefix}-hp-bar`).style.width = `${hpPercent}%`;
-    document.querySelector(`#${prefix}-hp-text`).textContent = `${fighter.hp} HP`;
+    document.querySelector(`#${prefix}-hp-text`).textContent = `${fighter.hp} / 100`;
     document.querySelector(`#${prefix}-shield`).textContent = `◇ ${fighter.shield}`;
   }
 
@@ -90,24 +92,42 @@ export class GameUI {
     const element = side === "player" ? this.playerSpell : this.enemySpell;
     element.textContent = result.label;
     element.className = `spell-popup visible spell-${result.type}`;
-    window.setTimeout(() => element.classList.remove("visible"), 850);
+    window.setTimeout(() => element.classList.remove("visible"), 1050);
 
-    if (result.combo > 1) {
-      this.comboBanner.textContent = `${result.combo}x COMBO!`;
+    const effectAssets = {
+      fire: "./assets/spells/fireball.svg",
+      water: "./assets/spells/cleanse.svg",
+      earth: "./assets/spells/shield.svg",
+      air: "./assets/runes/air.svg",
+      lightning: "./assets/spells/lightning.svg",
+      shadow: "./assets/spells/curse.svg"
+    };
+    this.battleEffectImage.src = effectAssets[result.type] ?? effectAssets.fire;
+    this.battleEffect.className = `battle-effect active effect-${result.type} from-${side}`;
+    const gameScreen = document.querySelector("#game-screen");
+    gameScreen.classList.add(`impact-${side}`);
+    window.setTimeout(() => {
+      this.battleEffect.className = "battle-effect";
+      gameScreen.classList.remove(`impact-${side}`);
+    }, 760);
+
+    if (result.combo > 1 || result.matchSize > 3) {
+      const comboText = result.combo > 1 ? `${result.combo}x COMBO` : "POWER MATCH";
+      const sizeBonus = result.matchSize > 3 ? ` · ${result.matchSize} RUNES` : "";
+      this.comboBanner.textContent = `${comboText}${sizeBonus}!`;
       this.comboBanner.classList.add("visible");
-      window.setTimeout(() => this.comboBanner.classList.remove("visible"), 900);
+      window.setTimeout(() => this.comboBanner.classList.remove("visible"), 1050);
     }
   }
 
   setMode(mode, roomCode = "") {
     const labels = {
-      ai: "VS ARCANE AI",
+      ai: "VS KAEL AI",
       debug: "LOCAL DEBUG DUEL",
       online: roomCode ? `ONLINE · ${roomCode}` : "ONLINE DUEL"
     };
     document.querySelector("#mode-label").textContent = labels[mode] ?? "RUNE DUEL";
-    document.querySelector("#enemy-name").textContent = mode === "ai" ? "ARCANE AI" : "RIVAL";
-    document.querySelector("#enemy-portrait-letter").textContent = mode === "ai" ? "A" : "R";
+    document.querySelector("#enemy-name").textContent = mode === "ai" ? "KAEL AI" : "RIVAL";
   }
 
   announceResult(won, message) {

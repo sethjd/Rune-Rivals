@@ -20,12 +20,16 @@
 
     <main id="app">
       <section id="menu-screen" class="screen menu-screen active" aria-labelledby="game-title">
-        <div class="brand-mark" aria-hidden="true">
+        <div class="brand-mark title-crest" aria-hidden="true">
           <img src="./assets/icons/app-icon.svg" alt="">
         </div>
         <p class="eyebrow">A falling-rune puzzle duel</p>
-        <h1 id="game-title">RUNE <span>RIVALS</span></h1>
-        <p class="menu-copy">Link magical runes. Cast chain spells. Outlast your rival.</p>
+        <div class="title-lockup">
+          <span class="title-rule"></span>
+          <h1 id="game-title">RUNE <span>RIVALS</span></h1>
+          <span class="title-rule"></span>
+        </div>
+        <p class="menu-copy">Stack runes. Cast spells. Duel wizards.</p>
 
         <div class="menu-actions">
           <button class="primary-button" data-action="play-ai">Play vs AI</button>
@@ -67,14 +71,14 @@
         <div class="panel help-panel">
           <p class="eyebrow">Field guide</p>
           <h2 id="help-title">How to Play</h2>
-          <p>Drop pairs of runes and connect 3 or more of the same kind up, down, left, or right.</p>
+          <p>Drop pairs of runes and connect 3 or more of the same kind up, down, left, or right. Larger groups and chain reactions strike much harder.</p>
           <div class="spell-guide">
-            <div><img src="./assets/runes/fire.svg" alt=""><b>Fire</b><span>6 damage</span></div>
-            <div><img src="./assets/runes/water.svg" alt=""><b>Water</b><span>Cleanse 2 junk</span></div>
-            <div><img src="./assets/runes/earth.svg" alt=""><b>Earth</b><span>6 shield</span></div>
-            <div><img src="./assets/runes/air.svg" alt=""><b>Air</b><span>Remove highest tile</span></div>
-            <div><img src="./assets/runes/lightning.svg" alt=""><b>Lightning</b><span>3 damage + junk</span></div>
-            <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>2 delayed junk</span></div>
+            <div><img src="./assets/runes/fire.svg" alt=""><b>Fire</b><span>12 damage</span></div>
+            <div><img src="./assets/runes/water.svg" alt=""><b>Water</b><span>Cleanse + pressure</span></div>
+            <div><img src="./assets/runes/earth.svg" alt=""><b>Earth</b><span>Shield + pressure</span></div>
+            <div><img src="./assets/runes/air.svg" alt=""><b>Air</b><span>Clear tile + pressure</span></div>
+            <div><img src="./assets/runes/lightning.svg" alt=""><b>Lightning</b><span>7 damage + 2 junk</span></div>
+            <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>3 delayed junk</span></div>
           </div>
           <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, P pauses. In debug mode, Tab swaps the controlled board.</p>
           <button class="primary-button" data-action="back-menu">Got it</button>
@@ -83,20 +87,20 @@
 
       <section id="game-screen" class="screen game-screen" aria-label="Rune Rivals duel">
         <header class="game-header">
-          <button class="icon-button" data-action="confirm-exit" aria-label="Return to menu">×</button>
+          <button class="icon-button" data-action="confirm-exit" aria-label="Return to menu">&times;</button>
           <div>
             <p id="mode-label" class="eyebrow">VS AI</p>
             <h2 id="battle-status">Rune Duel</h2>
           </div>
-          <button class="icon-button" data-action="pause" aria-label="Pause game">Ⅱ</button>
+          <button class="icon-button" data-action="pause" aria-label="Pause game">II</button>
         </header>
 
         <div class="arena">
           <article class="combatant player-combatant">
             <div class="fighter-heading">
-              <div class="portrait portrait-player"><span>R</span></div>
+              <div class="portrait portrait-player"><img src="./assets/portraits/lyra.svg" alt="Lyra, the player mage"></div>
               <div class="fighter-stats">
-                <div class="name-row"><strong id="player-name">YOU</strong><span id="player-shield">◇ 0</span></div>
+                <div class="name-row"><strong id="player-name">LYRA</strong><span id="player-shield">&#9671; 0</span></div>
                 <div class="hp-track"><div id="player-hp-bar" class="hp-fill"></div></div>
                 <span id="player-hp-text" class="hp-text">100 HP</span>
               </div>
@@ -108,13 +112,16 @@
             </div>
           </article>
 
-          <div class="versus-mark" aria-hidden="true">VS</div>
+          <div class="duel-center" aria-hidden="true">
+            <div class="versus-mark">VS</div>
+            <div class="arena-rune"></div>
+          </div>
 
           <article class="combatant enemy-combatant">
             <div class="fighter-heading enemy-heading">
-              <div class="portrait portrait-enemy"><span id="enemy-portrait-letter">A</span></div>
+              <div class="portrait portrait-enemy"><img id="enemy-portrait" src="./assets/portraits/kael.svg" alt="Kael, the rival mage"></div>
               <div class="fighter-stats">
-                <div class="name-row"><strong id="enemy-name">ARCANE AI</strong><span id="enemy-shield">◇ 0</span></div>
+                <div class="name-row"><strong id="enemy-name">KAEL AI</strong><span id="enemy-shield">&#9671; 0</span></div>
                 <div class="hp-track"><div id="enemy-hp-bar" class="hp-fill enemy-fill"></div></div>
                 <span id="enemy-hp-text" class="hp-text">100 HP</span>
               </div>
@@ -127,6 +134,10 @@
           </article>
         </div>
 
+        <div id="battle-effect" class="battle-effect" aria-hidden="true">
+          <div class="effect-trail"></div>
+          <img id="battle-effect-image" src="./assets/spells/fireball.svg" alt="">
+        </div>
         <div id="combo-banner" class="combo-banner"></div>
         <div id="pause-overlay" class="game-overlay hidden">
           <div class="panel">
@@ -137,10 +148,10 @@
         </div>
 
         <nav class="touch-controls" aria-label="Game controls">
-          <button data-control="left" aria-label="Move left">←</button>
-          <button data-control="right" aria-label="Move right">→</button>
-          <button data-control="rotate" aria-label="Rotate piece">↻</button>
-          <button data-control="down" aria-label="Soft drop">↓</button>
+          <button data-control="left" aria-label="Move left">&larr;</button>
+          <button data-control="right" aria-label="Move right">&rarr;</button>
+          <button data-control="rotate" aria-label="Rotate piece">&#8635;</button>
+          <button data-control="down" aria-label="Soft drop">&darr;</button>
           <button class="hard-drop" data-control="hard-drop" aria-label="Hard drop">DROP</button>
         </nav>
       </section>
