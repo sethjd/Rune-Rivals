@@ -4,9 +4,14 @@ import { RunePiece } from "./pieces.js";
 
 export class RuneAI {
   constructor(difficulty = "normal") {
-    this.difficulty = difficulty;
-    this.speed = AI_SPEEDS[difficulty] ?? AI_SPEEDS.normal;
+    this.configure({ difficulty });
     this.elapsed = 0;
+  }
+
+  configure({ difficulty = "normal", speed, accuracy } = {}) {
+    this.difficulty = difficulty;
+    this.speed = speed ?? AI_SPEEDS[difficulty] ?? AI_SPEEDS.normal;
+    this.accuracy = accuracy ?? ({ easy: 0.45, normal: 0.72, hard: 0.95 }[difficulty] ?? 0.72);
   }
 
   reset() {
@@ -21,6 +26,7 @@ export class RuneAI {
   }
 
   choosePlacement(board, piece) {
+    if (Math.random() > this.accuracy) return this.chooseCasualPlacement(board, piece);
     let best = null;
 
     for (let rotation = 0; rotation < 4; rotation += 1) {
@@ -52,5 +58,27 @@ export class RuneAI {
     }
 
     return best ?? { x: 3, y: 0, rotation: 0 };
+  }
+
+  chooseCasualPlacement(board, piece) {
+    const placements = [];
+    for (let rotation = 0; rotation < 4; rotation += 1) {
+      for (let x = 0; x < BOARD_WIDTH; x += 1) {
+        const testPiece = new RunePiece([...piece.runes]);
+        testPiece.x = x;
+        testPiece.rotation = rotation;
+        if (!board.canPlace(testPiece.cells())) continue;
+        while (board.canPlace(testPiece.cells(testPiece.x, testPiece.y + 1, rotation))) testPiece.y += 1;
+        placements.push({
+          x: testPiece.x,
+          y: testPiece.y,
+          rotation,
+          height: testPiece.y
+        });
+      }
+    }
+    placements.sort((a, b) => b.height - a.height);
+    const saferHalf = placements.slice(0, Math.max(1, Math.ceil(placements.length / 2)));
+    return saferHalf[Math.floor(Math.random() * saferHalf.length)] ?? { x: 3, y: 0, rotation: 0 };
   }
 }

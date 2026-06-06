@@ -13,7 +13,10 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Faster battles with offensive pressure on every spell, stronger large groups, and steep combo scaling
 - HP, shields, board-overflow penalties, victory, defeat, pause, and rematch
 - AI that scores possible placements and prefers immediate matches
-- Local debug duel; press `Tab` to swap the controlled board
+- Saved player profiles with custom names and 15 original avatars
+- A 20-level story journey with unlockable stages, named rivals, and battle quirks
+- Adjustable AI pacing and accuracy that ramps through the story
+- Original synthesized piano music and elemental attack sounds
 - Firebase Realtime Database room creation and joining
 - Responsive desktop, portrait-phone, and landscape-phone layouts
 - Keyboard and large touch controls
@@ -43,7 +46,6 @@ Other static servers work too, including the VS Code Live Server extension.
 | Soft drop | Down arrow | Down button |
 | Hard drop | Space | Drop button |
 | Pause | P | Top-right pause button |
-| Swap debug board | Tab | Keyboard only |
 
 ## Enable Firebase Multiplayer
 
@@ -125,6 +127,9 @@ src/
   multiplayer.js
   pieces.js
   pwa.js
+  profile.js
+  story.js
+  audio.js
   spells.js
   ui.js
 styles/
@@ -144,6 +149,7 @@ assets/
 - Online rematches return both players to the menu.
 - Rooms are not automatically deleted from Firebase.
 - AI plans one piece at a time and does not search future pieces.
+- Profiles and story progress are saved locally on each browser/device.
 - Sound, settings, accessibility options, and a guided tutorial are not included yet.
 - The service worker uses a cache-first app shell. During development, refresh after changing its cache version.
 
@@ -151,7 +157,7 @@ assets/
 
 1. Add anonymous Firebase Authentication and strict per-player database rules.
 2. Add room expiry and reconnection support.
-3. Build difficulty settings and deeper AI lookahead.
+3. Add story dialogue scenes, rewards, and optional three-star level goals.
 4. Add a short interactive tutorial and colour-blind rune patterns.
 5. Add original sound effects, haptics settings, and richer spell animation.
 6. Add online rematches, player display names, and match statistics.

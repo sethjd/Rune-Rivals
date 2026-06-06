@@ -7,22 +7,27 @@ import { applyDamage, applyIncomingAttack, castSpell, createFighter } from "./sp
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export class RuneRivalsGame {
-  constructor(ui, { onGameOver, onNetworkSync, onAttack } = {}) {
+  constructor(ui, { onGameOver, onNetworkSync, onAttack, onSpell, onMatch, onDrop } = {}) {
     this.ui = ui;
     this.onGameOver = onGameOver;
     this.onNetworkSync = onNetworkSync;
     this.onAttack = onAttack;
+    this.onSpell = onSpell;
+    this.onMatch = onMatch;
+    this.onDrop = onDrop;
     this.ai = new RuneAI("normal");
     this.loop = this.loop.bind(this);
     this.reset();
   }
 
-  reset(mode = "ai") {
+  reset(mode = "ai", options = {}) {
     this.mode = mode;
+    this.options = options;
     this.playerBoard = new RuneBoard();
     this.enemyBoard = new RuneBoard();
-    this.player = createFighter("YOU");
-    this.enemy = createFighter(mode === "ai" ? "ARCANE AI" : "RIVAL");
+    this.player = createFighter(options.playerName ?? "YOU");
+    this.enemy = createFighter(options.opponentName ?? (mode === "ai" ? "KAEL AI" : "RIVAL"));
+    this.applyBattleRules(options.rules ?? {});
     this.playerPiece = new RunePiece();
     this.playerNext = new RunePiece();
     this.enemyPiece = new RunePiece();
@@ -35,14 +40,19 @@ export class RuneRivalsGame {
     this.running = false;
     this.lastTime = 0;
     this.syncTimer = 0;
+    this.ai.configure({
+      difficulty: options.aiDifficulty ?? (mode === "ai" ? "easy" : "normal"),
+      speed: options.rules?.aiSpeed,
+      accuracy: options.rules?.aiAccuracy
+    });
     this.ai.reset();
   }
 
-  start(mode = "ai", roomCode = "") {
+  start(mode = "ai", roomCode = "", options = {}) {
     this.stop();
-    this.reset(mode);
+    this.reset(mode, options);
     this.running = true;
-    this.ui.setMode(mode, roomCode);
+    this.ui.setMode(mode, roomCode, options);
     this.ui.showScreen("game-screen");
     this.ui.render(this);
     this.frameId = requestAnimationFrame(this.loop);
@@ -61,7 +71,7 @@ export class RuneRivalsGame {
     if (!this.paused && !this.over && !this.resolving) {
       this.updateFalling("player", delta);
       if (this.mode === "debug") this.updateFalling("enemy", delta);
-      if (this.mode === "ai") this.ai.update(delta, this);
+      if (this.mode === "ai" || this.mode === "story") this.ai.update(delta, this);
 
       if (this.mode === "online") {
         this.syncTimer += delta;
@@ -130,6 +140,7 @@ export class RuneRivalsGame {
   async lockPiece(side) {
     if (this.resolving || this.over) return;
     this.resolving = true;
+    this.onDrop?.(side);
     const board = this.getBoard(side);
     const fighter = this.getFighter(side);
     const piece = this.getPiece(side);
@@ -144,7 +155,8 @@ export class RuneRivalsGame {
     }
 
     await board.resolveMatches({
-      onHighlight: async () => {
+      onHighlight: async (groups, combo) => {
+        this.onMatch?.(combo, groups);
         this.ui.render(this);
         await wait(230);
       },
@@ -173,8 +185,18 @@ export class RuneRivalsGame {
     const target = this.getFighter(this.otherSide(side));
     const casterBoard = this.getBoard(side);
     const targetBoard = this.getBoard(this.otherSide(side));
-    const result = castSpell(type, combo, caster, target, casterBoard, targetBoard, matchSize);
+    const result = castSpell(
+      type,
+      combo,
+      caster,
+      target,
+      casterBoard,
+      targetBoard,
+      matchSize,
+      this.spellPowerFor(side, type)
+    );
     this.ui.showSpell(side, result);
+    this.onSpell?.(side, result);
     if (result.overflowed) this.handleOverflow(this.otherSide(side));
 
     if (this.mode === "online" && side === "player" && result.attack) {
@@ -207,12 +229,14 @@ export class RuneRivalsGame {
   receiveAttack(attack) {
     const overflowed = applyIncomingAttack(attack, this.player, this.playerBoard);
     if (overflowed) this.handleOverflow("player");
-    this.ui.showSpell("enemy", {
+    const result = {
       type: attack.type ?? (attack.kind === "curse" ? "shadow" : attack.kind === "lightning" ? "lightning" : "fire"),
       label: attack.type ? `${attack.type.toUpperCase()} SURGE!` : attack.kind === "curse" ? "CURSE!" : attack.kind === "lightning" ? "CHAIN BOLT!" : "FIREBALL!",
       combo: 1,
       matchSize: 3
-    });
+    };
+    this.ui.showSpell("enemy", result);
+    this.onSpell?.("enemy", result);
     this.checkGameOver();
   }
 
@@ -257,6 +281,24 @@ export class RuneRivalsGame {
       this.onNetworkSync?.(this.serializeLocal());
       window.setTimeout(() => this.onGameOver?.(won), 450);
     }
+  }
+
+  applyBattleRules(rules) {
+    this.player.hp = rules.playerHp ?? this.player.hp;
+    this.player.maxHp = this.player.hp;
+    this.player.shield = rules.playerShield ?? 0;
+    this.enemy.hp = rules.enemyHp ?? this.enemy.hp;
+    this.enemy.maxHp = this.enemy.hp;
+    this.enemy.shield = rules.enemyShield ?? 0;
+    if (rules.playerJunk) this.playerBoard.addJunk(rules.playerJunk);
+    if (rules.enemyJunk) this.enemyBoard.addJunk(rules.enemyJunk);
+  }
+
+  spellPowerFor(side, type) {
+    const rules = this.options.rules ?? {};
+    const base = side === "player" ? rules.playerPower ?? 1 : rules.enemyPower ?? 1;
+    const runeBoosts = side === "player" ? rules.playerRuneBoost : rules.enemyRuneBoost;
+    return base * (runeBoosts?.[type] ?? 1);
   }
 
   getBoard(side) {

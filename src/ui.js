@@ -16,9 +16,7 @@ export class GameUI {
   }
 
   showScreen(id) {
-    for (const screen of this.screens) {
-      screen.classList.toggle("active", screen.id === id);
-    }
+    for (const screen of this.screens) screen.classList.toggle("active", screen.id === id);
   }
 
   makeBoardCells(element) {
@@ -38,7 +36,6 @@ export class GameUI {
     this.renderFighter("enemy", game.enemy);
     this.renderNext(document.querySelector("#player-next"), game.playerNext);
     this.renderNext(document.querySelector("#enemy-next"), game.enemyNext);
-
     document.querySelector("#battle-status").textContent = game.paused ? "Battle Paused" : "Rune Duel";
     this.pauseOverlay.classList.toggle("hidden", !game.paused);
   }
@@ -72,9 +69,10 @@ export class GameUI {
   }
 
   renderFighter(prefix, fighter) {
-    const hpPercent = Math.max(0, fighter.hp);
+    const maxHp = fighter.maxHp ?? 100;
+    const hpPercent = Math.max(0, Math.min(100, fighter.hp / maxHp * 100));
     document.querySelector(`#${prefix}-hp-bar`).style.width = `${hpPercent}%`;
-    document.querySelector(`#${prefix}-hp-text`).textContent = `${fighter.hp} / 100`;
+    document.querySelector(`#${prefix}-hp-text`).textContent = `${fighter.hp} / ${maxHp}`;
     document.querySelector(`#${prefix}-shield`).textContent = `◇ ${fighter.shield}`;
   }
 
@@ -120,14 +118,18 @@ export class GameUI {
     }
   }
 
-  setMode(mode, roomCode = "") {
+  setMode(mode, roomCode = "", options = {}) {
     const labels = {
       ai: "VS KAEL AI",
+      story: options.storyLevel ? `STORY · LEVEL ${options.storyLevel.number}` : "STORY DUEL",
       debug: "LOCAL DEBUG DUEL",
       online: roomCode ? `ONLINE · ${roomCode}` : "ONLINE DUEL"
     };
     document.querySelector("#mode-label").textContent = labels[mode] ?? "RUNE DUEL";
-    document.querySelector("#enemy-name").textContent = mode === "ai" ? "KAEL AI" : "RIVAL";
+    document.querySelector("#player-name").textContent = options.playerName ?? "LYRA";
+    document.querySelector("#enemy-name").textContent = options.opponentName ?? (mode === "ai" ? "KAEL AI" : "RIVAL");
+    if (options.playerAvatar) document.querySelector(".portrait-player img").src = options.playerAvatar;
+    if (options.opponentAvatar) document.querySelector("#enemy-portrait").src = options.opponentAvatar;
   }
 
   announceResult(won, message) {

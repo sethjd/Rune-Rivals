@@ -4,6 +4,7 @@ export function createFighter(name) {
   return {
     name,
     hp: 100,
+    maxHp: 100,
     shield: 0,
     junkQueue: 0
   };
@@ -16,8 +17,8 @@ export function applyDamage(fighter, amount) {
   return amount - blocked;
 }
 
-export function castSpell(type, combo, caster, target, casterBoard, targetBoard, matchSize = 3) {
-  const multiplier = comboMultiplier(combo) * matchSizeMultiplier(matchSize);
+export function castSpell(type, combo, caster, target, casterBoard, targetBoard, matchSize = 3, powerScale = 1) {
+  const multiplier = comboMultiplier(combo) * matchSizeMultiplier(matchSize) * powerScale;
   const result = {
     type,
     combo,

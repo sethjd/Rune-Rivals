@@ -20,6 +20,13 @@
 
     <main id="app">
       <section id="menu-screen" class="screen menu-screen active" aria-labelledby="game-title">
+        <button id="profile-chip" class="profile-chip" data-action="show-profile" aria-label="Edit player profile">
+          <img id="menu-profile-avatar" alt="">
+          <span><small>RUNE MAGE</small><strong id="menu-profile-name">PLAYER</strong></span>
+        </button>
+        <button class="audio-toggle" data-action="toggle-audio" aria-label="Toggle music and sounds">
+          <span class="audio-icon">♪</span>
+        </button>
         <div class="brand-mark title-crest" aria-hidden="true">
           <img src="./assets/icons/app-icon.svg" alt="">
         </div>
@@ -32,14 +39,60 @@
         <p class="menu-copy">Stack runes. Cast spells. Duel wizards.</p>
 
         <div class="menu-actions">
+          <button class="primary-button" data-action="show-story">Story Mode</button>
           <button class="primary-button" data-action="play-ai">Play vs AI</button>
           <button data-action="create-room">Create Online Room</button>
           <button data-action="show-join">Join Online Room</button>
-          <button data-action="play-debug">Local Debug Duel</button>
           <button class="text-button" data-action="show-help">How to Play</button>
         </div>
         <p id="online-status" class="online-status"></p>
         <button id="install-button" class="install-button hidden">Install Rune Rivals</button>
+      </section>
+
+      <section id="profile-screen" class="screen panel-screen" aria-labelledby="profile-title">
+        <div class="panel profile-panel">
+          <p class="eyebrow">Your rune mage</p>
+          <h2 id="profile-title">Player Profile</h2>
+          <div class="profile-editor-heading">
+            <img id="profile-preview" alt="Selected avatar">
+            <label for="profile-name-input">
+              Mage name
+              <input id="profile-name-input" maxlength="16" autocomplete="nickname" placeholder="Enter a name">
+            </label>
+          </div>
+          <p class="avatar-instruction">Choose an avatar</p>
+          <div id="avatar-grid" class="avatar-grid" role="radiogroup" aria-label="Choose an avatar"></div>
+          <p id="profile-message" class="form-message"></p>
+          <div class="row-actions">
+            <button class="primary-button" data-action="save-profile">Save Profile</button>
+            <button data-action="back-menu">Cancel</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="story-screen" class="screen story-screen" aria-labelledby="story-title">
+        <header class="story-header">
+          <button class="icon-button" data-action="back-menu" aria-label="Return to menu">&times;</button>
+          <div>
+            <p class="eyebrow">The Shattered Sigil</p>
+            <h2 id="story-title">Story Journey</h2>
+          </div>
+          <button class="audio-toggle story-audio" data-action="toggle-audio" aria-label="Toggle music and sounds">♪</button>
+        </header>
+        <div class="story-map-shell">
+          <div class="story-path" aria-hidden="true"></div>
+          <div id="story-levels" class="story-levels"></div>
+        </div>
+        <div id="story-detail" class="panel story-detail">
+          <img id="story-opponent-avatar" src="./assets/portraits/kael.svg" alt="">
+          <div>
+            <p id="story-level-label" class="eyebrow">Level 1</p>
+            <h3 id="story-opponent-name">The Gatekeeper</h3>
+            <p id="story-description">Choose a level on the path.</p>
+            <p id="story-quirk" class="story-quirk"></p>
+          </div>
+          <button id="story-play-button" class="primary-button" data-action="play-story">Begin Duel</button>
+        </div>
       </section>
 
       <section id="join-screen" class="screen panel-screen" aria-labelledby="join-title">
@@ -80,7 +133,7 @@
             <div><img src="./assets/runes/lightning.svg" alt=""><b>Lightning</b><span>7 damage + 2 junk</span></div>
             <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>3 delayed junk</span></div>
           </div>
-          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, P pauses. In debug mode, Tab swaps the controlled board.</p>
+          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, and P pauses.</p>
           <button class="primary-button" data-action="back-menu">Got it</button>
         </div>
       </section>
@@ -92,7 +145,10 @@
             <p id="mode-label" class="eyebrow">VS AI</p>
             <h2 id="battle-status">Rune Duel</h2>
           </div>
-          <button class="icon-button" data-action="pause" aria-label="Pause game">II</button>
+          <div class="game-header-actions">
+            <button class="audio-toggle game-audio" data-action="toggle-audio" aria-label="Toggle music and sounds">♪</button>
+            <button class="icon-button" data-action="pause" aria-label="Pause game">II</button>
+          </div>
         </header>
 
         <div class="arena">
@@ -108,8 +164,8 @@
             <div class="board-shell">
               <div id="player-board" class="board" aria-label="Player rune board"></div>
               <div id="player-spell" class="spell-popup" aria-live="polite"></div>
-              <div id="player-next" class="next-piece" aria-label="Next piece"></div>
             </div>
+            <div class="next-piece-row"><span>UP NEXT</span><div id="player-next" class="next-piece" aria-label="Next piece"></div></div>
           </article>
 
           <div class="duel-center" aria-hidden="true">
@@ -129,8 +185,8 @@
             <div class="board-shell">
               <div id="enemy-board" class="board enemy-board" aria-label="Opponent rune board"></div>
               <div id="enemy-spell" class="spell-popup" aria-live="polite"></div>
-              <div id="enemy-next" class="next-piece" aria-label="Opponent next piece"></div>
             </div>
+            <div class="next-piece-row enemy-next-row"><span>UP NEXT</span><div id="enemy-next" class="next-piece" aria-label="Opponent next piece"></div></div>
           </article>
         </div>
 
@@ -162,6 +218,8 @@
           <h2 id="result-title">Victory!</h2>
           <p id="result-message">Your rune craft won the day.</p>
           <button class="primary-button" data-action="rematch">Rematch</button>
+          <button id="next-level-button" class="primary-button hidden" data-action="next-story-level">Next Level</button>
+          <button id="story-map-button" class="hidden" data-action="show-story">Story Map</button>
           <button data-action="back-menu">Back to Menu</button>
         </div>
       </section>

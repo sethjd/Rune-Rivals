@@ -1,42 +1,86 @@
+import { AudioManager } from "./audio.js";
 import { RuneRivalsGame } from "./game.js";
 import { InputController } from "./input.js";
 import { MultiplayerClient } from "./multiplayer.js";
 import { registerPWA } from "./pwa.js";
+import {
+  AVATARS,
+  avatarDataUri,
+  completeStoryLevel,
+  loadProfile,
+  saveProfile
+} from "./profile.js";
+import { getStoryLevel, STORY_LEVELS } from "./story.js";
 import { GameUI } from "./ui.js";
 
 const ui = new GameUI();
 const multiplayer = new MultiplayerClient();
+const audio = new AudioManager();
+let profile = loadProfile();
+let selectedAvatarId = profile.avatarId;
+let selectedStoryLevel = getStoryLevel(Math.min(profile.unlockedLevel, STORY_LEVELS.length));
 let lastMode = "ai";
+let lastRoomCode = "";
+let lastStartOptions = {};
 let onlineDisconnected = false;
 
 const game = new RuneRivalsGame(ui, {
-  onGameOver: (won) => {
-    const message = won
-      ? "Your rune craft overwhelmed the rival."
-      : "The rival broke through your final ward.";
-    ui.announceResult(won, message);
-  },
+  onGameOver: (won) => handleGameOver(won),
   onNetworkSync: (state) => multiplayer.syncState(state).catch((error) => {
     console.warn("State sync paused:", error);
   }),
   onAttack: (attack) => multiplayer.sendAttack(attack).catch((error) => {
     console.warn("Attack sync paused:", error);
-  })
+  }),
+  onSpell: (_side, result) => audio.playSpell(result.type),
+  onMatch: (combo) => audio.playMatch(combo),
+  onDrop: () => audio.playDrop()
 });
 
 new InputController(
-  (action) => game.handleAction(action),
+  (action) => {
+    audio.activate();
+    if (action === "left" || action === "right" || action === "rotate" || action === "down") audio.playMove();
+    game.handleAction(action);
+  },
   () => game.togglePause(),
   () => game.swapDebugSide()
 );
 
 document.addEventListener("click", async (event) => {
+  const avatarButton = event.target.closest("[data-avatar]");
+  if (avatarButton) {
+    selectAvatar(avatarButton.dataset.avatar);
+    audio.playMove();
+    return;
+  }
+
+  const levelButton = event.target.closest("[data-level]");
+  if (levelButton && !levelButton.disabled) {
+    selectStoryLevel(Number(levelButton.dataset.level));
+    audio.playMove();
+    return;
+  }
+
   const button = event.target.closest("[data-action]");
   if (!button) return;
+  await audio.activate();
   const action = button.dataset.action;
 
-  if (action === "play-ai") startGame("ai");
-  if (action === "play-debug") startGame("debug");
+  if (action === "play-ai") startGame("ai", "", {
+    opponentName: "KAEL AI",
+    opponentAvatar: "./assets/portraits/kael.svg",
+    aiDifficulty: "easy"
+  });
+  if (action === "show-story") showStory();
+  if (action === "play-story") startStoryLevel(selectedStoryLevel.number);
+  if (action === "next-story-level") startStoryLevel(Math.min(STORY_LEVELS.length, selectedStoryLevel.number + 1));
+  if (action === "show-profile") showProfile();
+  if (action === "save-profile") saveProfileFromForm();
+  if (action === "toggle-audio") {
+    audio.toggle();
+    updateAudioButtons();
+  }
   if (action === "show-help") ui.showScreen("help-screen");
   if (action === "show-join") {
     document.querySelector("#join-message").textContent = "";
@@ -45,11 +89,8 @@ document.addEventListener("click", async (event) => {
   if (action === "back-menu" || action === "confirm-exit") returnToMenu();
   if (action === "pause") game.togglePause();
   if (action === "rematch") {
-    if (lastMode === "online") {
-      returnToMenu();
-    } else {
-      startGame(lastMode);
-    }
+    if (lastMode === "online") returnToMenu();
+    else startGame(lastMode, lastRoomCode, lastStartOptions);
   }
   if (action === "create-room") await createRoom(button);
   if (action === "join-room") await joinRoom(button);
@@ -60,10 +101,158 @@ document.querySelector("#room-code-input").addEventListener("input", (event) => 
   event.target.value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
 });
 
-function startGame(mode, roomCode = "") {
+document.querySelector("#profile-name-input").addEventListener("input", (event) => {
+  event.target.value = event.target.value.replace(/[^\p{L}\p{N} _'-]/gu, "").slice(0, 16);
+});
+
+function startGame(mode, roomCode = "", options = {}) {
   lastMode = mode;
+  lastRoomCode = roomCode;
+  lastStartOptions = { ...options };
   onlineDisconnected = false;
-  game.start(mode, roomCode);
+  hideStoryResultButtons();
+  game.start(mode, roomCode, {
+    playerName: profile.name,
+    playerAvatar: avatarDataUri(profile.avatarId),
+    ...options
+  });
+}
+
+function startStoryLevel(levelNumber) {
+  const level = getStoryLevel(levelNumber);
+  if (level.number > profile.unlockedLevel) return;
+  selectedStoryLevel = level;
+  startGame("story", "", {
+    storyLevel: level,
+    opponentName: level.opponent,
+    opponentAvatar: avatarDataUri(level.avatarId),
+    rules: level.rules
+  });
+}
+
+function handleGameOver(won) {
+  if (won) audio.playVictory();
+  else audio.playDefeat();
+
+  let message = won
+    ? "Your rune craft overwhelmed the rival."
+    : "The rival broke through your final ward.";
+
+  if (lastMode === "story") {
+    if (won) {
+      profile = completeStoryLevel(profile, selectedStoryLevel.number);
+      renderMenuProfile();
+      renderStoryMap();
+      message = selectedStoryLevel.number === STORY_LEVELS.length
+        ? "The rift is sealed. You restored the Shattered Sigil!"
+        : `${selectedStoryLevel.opponent} is defeated. The path ahead is open.`;
+    } else {
+      message = `${selectedStoryLevel.opponent} holds the path. Adjust your rune craft and try again.`;
+    }
+    showStoryResultButtons(won);
+  } else {
+    hideStoryResultButtons();
+  }
+
+  ui.announceResult(won, message);
+}
+
+function showProfile() {
+  selectedAvatarId = profile.avatarId;
+  document.querySelector("#profile-name-input").value = profile.name;
+  document.querySelector("#profile-message").textContent = "";
+  renderAvatarGrid();
+  updateProfilePreview();
+  ui.showScreen("profile-screen");
+}
+
+function selectAvatar(avatarId) {
+  selectedAvatarId = avatarId;
+  updateProfilePreview();
+  for (const button of document.querySelectorAll("[data-avatar]")) {
+    const selected = button.dataset.avatar === avatarId;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  }
+}
+
+function saveProfileFromForm() {
+  const name = document.querySelector("#profile-name-input").value.trim();
+  if (!name) {
+    document.querySelector("#profile-message").textContent = "Enter a mage name first.";
+    return;
+  }
+  profile = saveProfile({ ...profile, name, avatarId: selectedAvatarId });
+  renderMenuProfile();
+  ui.showScreen("menu-screen");
+}
+
+function renderAvatarGrid() {
+  const grid = document.querySelector("#avatar-grid");
+  grid.innerHTML = AVATARS.map((avatar) => `
+    <button class="avatar-choice ${avatar.id === selectedAvatarId ? "selected" : ""}"
+      data-avatar="${avatar.id}" role="radio" aria-checked="${avatar.id === selectedAvatarId}"
+      title="${avatar.name}">
+      <img src="${avatarDataUri(avatar.id)}" alt="${avatar.name}">
+    </button>
+  `).join("");
+}
+
+function updateProfilePreview() {
+  document.querySelector("#profile-preview").src = avatarDataUri(selectedAvatarId);
+}
+
+function renderMenuProfile() {
+  document.querySelector("#menu-profile-name").textContent = profile.name;
+  document.querySelector("#menu-profile-avatar").src = avatarDataUri(profile.avatarId);
+}
+
+function showStory() {
+  game.stop();
+  multiplayer.leave();
+  selectedStoryLevel = getStoryLevel(Math.min(selectedStoryLevel.number, profile.unlockedLevel));
+  renderStoryMap();
+  selectStoryLevel(selectedStoryLevel.number);
+  ui.showScreen("story-screen");
+}
+
+function renderStoryMap() {
+  const container = document.querySelector("#story-levels");
+  container.innerHTML = STORY_LEVELS.map((level) => {
+    const locked = level.number > profile.unlockedLevel;
+    const complete = profile.completedLevels.includes(level.number);
+    return `<button class="story-node ${locked ? "locked" : ""} ${complete ? "complete" : ""}"
+      data-level="${level.number}" ${locked ? "disabled" : ""}
+      aria-label="Level ${level.number}: ${level.title}${locked ? ", locked" : ""}">
+      <span>${complete ? "★" : level.number}</span>
+    </button>`;
+  }).join("");
+}
+
+function selectStoryLevel(levelNumber) {
+  selectedStoryLevel = getStoryLevel(levelNumber);
+  document.querySelector("#story-level-label").textContent = `Level ${selectedStoryLevel.number} · ${selectedStoryLevel.title}`;
+  document.querySelector("#story-opponent-name").textContent = selectedStoryLevel.opponent;
+  document.querySelector("#story-description").textContent = selectedStoryLevel.description;
+  document.querySelector("#story-quirk").textContent = selectedStoryLevel.quirk;
+  document.querySelector("#story-opponent-avatar").src = avatarDataUri(selectedStoryLevel.avatarId);
+  document.querySelector("#story-play-button").disabled = selectedStoryLevel.number > profile.unlockedLevel;
+  for (const node of document.querySelectorAll(".story-node")) {
+    node.classList.toggle("selected", Number(node.dataset.level) === selectedStoryLevel.number);
+  }
+}
+
+function showStoryResultButtons(won) {
+  const nextButton = document.querySelector("#next-level-button");
+  nextButton.classList.toggle("hidden", !won || selectedStoryLevel.number >= STORY_LEVELS.length);
+  document.querySelector("#story-map-button").classList.remove("hidden");
+  document.querySelector('[data-action="rematch"]').textContent = won ? "Replay Level" : "Try Again";
+}
+
+function hideStoryResultButtons() {
+  document.querySelector("#next-level-button").classList.add("hidden");
+  document.querySelector("#story-map-button").classList.add("hidden");
+  document.querySelector('[data-action="rematch"]').textContent = "Rematch";
 }
 
 async function createRoom(button) {
@@ -100,7 +289,10 @@ async function joinRoom(button) {
 
 function networkHandlers() {
   return {
-    onReady: (code) => startGame("online", code),
+    onReady: (code) => startGame("online", code, {
+      opponentName: "ONLINE RIVAL",
+      opponentAvatar: "./assets/portraits/kael.svg"
+    }),
     onRemoteState: (state) => game.loadRemoteState(state),
     onAttack: (attack) => game.receiveAttack(attack),
     onDisconnect: () => {
@@ -115,7 +307,16 @@ function networkHandlers() {
 function returnToMenu() {
   game.stop();
   multiplayer.leave();
+  renderMenuProfile();
   ui.showScreen("menu-screen");
+}
+
+function updateAudioButtons() {
+  for (const button of document.querySelectorAll(".audio-toggle")) {
+    button.classList.toggle("muted", audio.muted);
+    button.querySelector(".audio-icon")?.replaceChildren(document.createTextNode(audio.muted ? "×" : "♪"));
+    if (!button.querySelector(".audio-icon")) button.textContent = audio.muted ? "×" : "♪";
+  }
 }
 
 function showFirebaseMessage() {
@@ -136,4 +337,9 @@ if (!multiplayer.configured) {
   showMenuMessage("Online rooms are ready to enable after adding your Firebase config.");
 }
 
+renderMenuProfile();
+renderAvatarGrid();
+renderStoryMap();
+selectStoryLevel(selectedStoryLevel.number);
+updateAudioButtons();
 registerPWA();

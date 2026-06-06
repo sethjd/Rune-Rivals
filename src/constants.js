@@ -6,9 +6,9 @@ export const DROP_SPEED = 720;
 export const SOFT_DROP_SPEED = 55;
 export const LOCK_DELAY = 250;
 export const AI_SPEEDS = {
-  easy: 1500,
-  normal: 1050,
-  hard: 700
+  easy: 4800,
+  normal: 3400,
+  hard: 2200
 };
 
 export const RUNES = ["fire", "water", "earth", "air", "lightning", "shadow"];
