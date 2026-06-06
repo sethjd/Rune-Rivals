@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#17102f">
+    <meta name="description" content="Rune Rivals is an original falling-rune puzzle battler.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rune Rivals">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./assets/icons/app-icon-192.png">
+    <link rel="icon" href="./assets/icons/app-icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles/main.css">
+    <title>Rune Rivals</title>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main id="app">
+      <section id="menu-screen" class="screen menu-screen active" aria-labelledby="game-title">
+        <div class="brand-mark" aria-hidden="true">
+          <img src="./assets/icons/app-icon.svg" alt="">
+        </div>
+        <p class="eyebrow">A falling-rune puzzle duel</p>
+        <h1 id="game-title">RUNE <span>RIVALS</span></h1>
+        <p class="menu-copy">Link magical runes. Cast chain spells. Outlast your rival.</p>
+
+        <div class="menu-actions">
+          <button class="primary-button" data-action="play-ai">Play vs AI</button>
+          <button data-action="create-room">Create Online Room</button>
+          <button data-action="show-join">Join Online Room</button>
+          <button data-action="play-debug">Local Debug Duel</button>
+          <button class="text-button" data-action="show-help">How to Play</button>
+        </div>
+        <p id="online-status" class="online-status"></p>
+        <button id="install-button" class="install-button hidden">Install Rune Rivals</button>
+      </section>
+
+      <section id="join-screen" class="screen panel-screen" aria-labelledby="join-title">
+        <div class="panel modal-panel">
+          <p class="eyebrow">Online duel</p>
+          <h2 id="join-title">Join a Room</h2>
+          <label for="room-code-input">Room code</label>
+          <input id="room-code-input" maxlength="6" autocomplete="off" inputmode="text" placeholder="ABC123">
+          <p id="join-message" class="form-message"></p>
+          <div class="row-actions">
+            <button class="primary-button" data-action="join-room">Join</button>
+            <button data-action="back-menu">Back</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="lobby-screen" class="screen panel-screen" aria-labelledby="lobby-title">
+        <div class="panel modal-panel">
+          <p class="eyebrow">Online duel</p>
+          <h2 id="lobby-title">Your Room</h2>
+          <p class="room-code-label">Share this code</p>
+          <div id="room-code-display" class="room-code">------</div>
+          <p id="lobby-message">Waiting for a rival to join...</p>
+          <button data-action="leave-room">Cancel</button>
+        </div>
+      </section>
+
+      <section id="help-screen" class="screen panel-screen" aria-labelledby="help-title">
+        <div class="panel help-panel">
+          <p class="eyebrow">Field guide</p>
+          <h2 id="help-title">How to Play</h2>
+          <p>Drop pairs of runes and connect 3 or more of the same kind up, down, left, or right.</p>
+          <div class="spell-guide">
+            <div><img src="./assets/runes/fire.svg" alt=""><b>Fire</b><span>6 damage</span></div>
+            <div><img src="./assets/runes/water.svg" alt=""><b>Water</b><span>Cleanse 2 junk</span></div>
+            <div><img src="./assets/runes/earth.svg" alt=""><b>Earth</b><span>6 shield</span></div>
+            <div><img src="./assets/runes/air.svg" alt=""><b>Air</b><span>Remove highest tile</span></div>
+            <div><img src="./assets/runes/lightning.svg" alt=""><b>Lightning</b><span>3 damage + junk</span></div>
+            <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>2 delayed junk</span></div>
+          </div>
+          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, P pauses. In debug mode, Tab swaps the controlled board.</p>
+          <button class="primary-button" data-action="back-menu">Got it</button>
+        </div>
+      </section>
+
+      <section id="game-screen" class="screen game-screen" aria-label="Rune Rivals duel">
+        <header class="game-header">
+          <button class="icon-button" data-action="confirm-exit" aria-label="Return to menu">×</button>
+          <div>
+            <p id="mode-label" class="eyebrow">VS AI</p>
+            <h2 id="battle-status">Rune Duel</h2>
+          </div>
+          <button class="icon-button" data-action="pause" aria-label="Pause game">Ⅱ</button>
+        </header>
+
+        <div class="arena">
+          <article class="combatant player-combatant">
+            <div class="fighter-heading">
+              <div class="portrait portrait-player"><span>R</span></div>
+              <div class="fighter-stats">
+                <div class="name-row"><strong id="player-name">YOU</strong><span id="player-shield">◇ 0</span></div>
+                <div class="hp-track"><div id="player-hp-bar" class="hp-fill"></div></div>
+                <span id="player-hp-text" class="hp-text">100 HP</span>
+              </div>
+            </div>
+            <div class="board-shell">
+              <div id="player-board" class="board" aria-label="Player rune board"></div>
+              <div id="player-spell" class="spell-popup" aria-live="polite"></div>
+              <div id="player-next" class="next-piece" aria-label="Next piece"></div>
+            </div>
+          </article>
+
+          <div class="versus-mark" aria-hidden="true">VS</div>
+
+          <article class="combatant enemy-combatant">
+            <div class="fighter-heading enemy-heading">
+              <div class="portrait portrait-enemy"><span id="enemy-portrait-letter">A</span></div>
+              <div class="fighter-stats">
+                <div class="name-row"><strong id="enemy-name">ARCANE AI</strong><span id="enemy-shield">◇ 0</span></div>
+                <div class="hp-track"><div id="enemy-hp-bar" class="hp-fill enemy-fill"></div></div>
+                <span id="enemy-hp-text" class="hp-text">100 HP</span>
+              </div>
+            </div>
+            <div class="board-shell">
+              <div id="enemy-board" class="board enemy-board" aria-label="Opponent rune board"></div>
+              <div id="enemy-spell" class="spell-popup" aria-live="polite"></div>
+              <div id="enemy-next" class="next-piece" aria-label="Opponent next piece"></div>
+            </div>
+          </article>
+        </div>
+
+        <div id="combo-banner" class="combo-banner"></div>
+        <div id="pause-overlay" class="game-overlay hidden">
+          <div class="panel">
+            <h2>Battle Paused</h2>
+            <button class="primary-button" data-action="pause">Resume</button>
+            <button data-action="back-menu">Return to Menu</button>
+          </div>
+        </div>
+
+        <nav class="touch-controls" aria-label="Game controls">
+          <button data-control="left" aria-label="Move left">←</button>
+          <button data-control="right" aria-label="Move right">→</button>
+          <button data-control="rotate" aria-label="Rotate piece">↻</button>
+          <button data-control="down" aria-label="Soft drop">↓</button>
+          <button class="hard-drop" data-control="hard-drop" aria-label="Hard drop">DROP</button>
+        </nav>
+      </section>
+
+      <section id="result-screen" class="screen panel-screen result-screen" aria-labelledby="result-title">
+        <div class="panel modal-panel">
+          <p id="result-eyebrow" class="eyebrow">Duel complete</p>
+          <h2 id="result-title">Victory!</h2>
+          <p id="result-message">Your rune craft won the day.</p>
+          <button class="primary-button" data-action="rematch">Rematch</button>
+          <button data-action="back-menu">Back to Menu</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
