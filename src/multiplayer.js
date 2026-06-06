@@ -1,6 +1,5 @@
 import { firebaseConfig, hasFirebaseConfig } from "./firebase-config.js";
 import {
-  availableSeat,
   disconnectedTooLong,
   eliminatePlayer,
   finishWhenOneRemains,
@@ -52,6 +51,7 @@ export class MultiplayerClient {
     this.leave();
     this.roomCode = makeRoomCode();
     this.playerId = makePlayerId();
+    this.playerSeat = 1;
     this.isHost = true;
     const { ref, set } = this.api;
 
@@ -59,6 +59,9 @@ export class MultiplayerClient {
       status: "waiting",
       hostId: this.playerId,
       createdAt: Date.now(),
+      seats: {
+        1: this.playerId
+      },
       players: {
         [this.playerId]: playerRecord(profile, 1)
       }
@@ -74,27 +77,101 @@ export class MultiplayerClient {
     this.leave();
     this.roomCode = code.trim().toUpperCase();
     this.playerId = makePlayerId();
-    const { ref, get, runTransaction } = this.api;
+    const { ref, get, set, remove } = this.api;
     const roomRef = ref(this.db, `rooms/${this.roomCode}`);
     const initial = await get(roomRef);
-    if (!initial.exists()) throw new Error("That room does not exist.");
-    if (initial.val().status !== "waiting") throw new Error("That match has already started.");
-    const connectedPlayers = roomPlayers(initial.val()).filter((player) => player.connected !== false);
-    if (connectedPlayers.length >= MAX_ROOM_PLAYERS) throw new Error("That room is full.");
+    if (!initial.exists()) {
+      this.clearFailedJoin();
+      throw new Error("That room does not exist.");
+    }
+    const initialRoom = initial.val();
+    if (initialRoom.status !== "waiting") {
+      this.clearFailedJoin();
+      throw new Error("That match has already started.");
+    }
+    const connectedPlayers = roomPlayers(initialRoom).filter((player) => player.connected !== false);
+    if (connectedPlayers.length >= MAX_ROOM_PLAYERS) {
+      this.clearFailedJoin();
+      throw new Error("That room is full.");
+    }
 
-    const result = await runTransaction(roomRef, (room) => {
-      if (!room || room.status !== "waiting") return;
-      const seat = availableSeat(room);
-      if (!seat) return;
-      room.players ??= {};
-      room.players[this.playerId] = playerRecord(profile, seat);
-      return room;
-    });
-    if (!result.committed) throw new Error("The room filled up or started while you were joining.");
+    const seat = await this.claimOpenSeat(initialRoom);
+    if (!seat) {
+      this.clearFailedJoin();
+      throw new Error("That room is full.");
+    }
+    this.playerSeat = seat;
+    const playerRef = ref(this.db, `rooms/${this.roomCode}/players/${this.playerId}`);
+
+    try {
+      await set(playerRef, playerRecord(profile, seat));
+      const confirmed = await get(roomRef);
+      const confirmedRoom = confirmed.val();
+      if (!confirmedRoom || confirmedRoom.status !== "waiting") {
+        await remove(playerRef);
+        await this.releaseSeatClaim();
+        throw new Error("That match started while you were joining.");
+      }
+      const confirmedPlayers = roomPlayers(confirmedRoom).filter((player) => player.connected !== false);
+      if (!confirmedRoom.players?.[this.playerId] || confirmedPlayers.length > MAX_ROOM_PLAYERS) {
+        await remove(playerRef);
+        await this.releaseSeatClaim();
+        throw new Error("That room became full while you were joining.");
+      }
+    } catch (error) {
+      if (this.playerSeat) await this.releaseSeatClaim().catch(() => {});
+      this.clearFailedJoin();
+      throw error;
+    }
 
     this.armPresence();
     this.subscribeRoom(handlers);
     return this.roomCode;
+  }
+
+  async claimOpenSeat(room) {
+    const { ref, runTransaction } = this.api;
+    const connectedSeats = new Set(
+      roomPlayers(room)
+        .filter((player) => player.connected !== false)
+        .map((player) => player.seat)
+    );
+
+    for (let seat = 1; seat <= MAX_ROOM_PLAYERS; seat += 1) {
+      if (connectedSeats.has(seat)) continue;
+      const observedOwner = room.seats?.[seat] ?? null;
+      const observedPlayer = observedOwner ? room.players?.[observedOwner] : null;
+      const replaceableOwner = observedPlayer?.connected === false || !observedPlayer
+        ? observedOwner
+        : null;
+      const claimRef = ref(this.db, `rooms/${this.roomCode}/seats/${seat}`);
+      const result = await runTransaction(claimRef, (currentOwner) => {
+        if (currentOwner == null || currentOwner === replaceableOwner) return this.playerId;
+        return;
+      });
+      if (result.committed && result.snapshot.val() === this.playerId) return seat;
+    }
+    return null;
+  }
+
+  async releaseSeatClaim() {
+    if (!this.db || !this.roomCode || !this.playerId || !this.playerSeat) return;
+    const { ref, runTransaction } = this.api;
+    const ownerId = this.playerId;
+    const seat = this.playerSeat;
+    const claimRef = ref(this.db, `rooms/${this.roomCode}/seats/${seat}`);
+    await runTransaction(claimRef, (currentOwner) => {
+      return currentOwner === ownerId ? null : currentOwner;
+    });
+    if (this.playerId === ownerId) this.playerSeat = null;
+  }
+
+  clearFailedJoin() {
+    this.roomCode = "";
+    this.playerId = "";
+    this.playerSeat = null;
+    this.isHost = false;
+    this.latestRoom = null;
   }
 
   armPresence() {
@@ -457,6 +534,7 @@ export class MultiplayerClient {
           return eliminatePlayer(room, playerId);
         }).catch(() => {});
       } else {
+        this.releaseSeatClaim().catch(() => {});
         this.api.update(playerRef, {
           connected: false,
           alive: false,
@@ -468,6 +546,7 @@ export class MultiplayerClient {
 
     this.roomCode = "";
     this.playerId = "";
+    this.playerSeat = null;
     this.isHost = false;
     this.latestRoom = null;
     this.handlers = null;
