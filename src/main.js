@@ -1,6 +1,14 @@
 import { AudioManager } from "./audio.js";
+import {
+  CODEX_GLOSSARY,
+  getCodexSpell,
+  POWER_EXAMPLES,
+  powerForExample,
+  SPELL_CODEX
+} from "./codex.js";
 import { RuneRivalsGame } from "./game.js";
 import { InputController } from "./input.js";
+import { LeaderboardClient, leagueTier } from "./leaderboard.js";
 import { MultiplayerClient } from "./multiplayer.js";
 import { registerPWA } from "./pwa.js";
 import {
@@ -20,6 +28,7 @@ import { GameUI } from "./ui.js";
 
 const ui = new GameUI();
 const multiplayer = new MultiplayerClient();
+const leaderboard = new LeaderboardClient();
 const audio = new AudioManager();
 let profile = loadProfile();
 let selectedAvatarId = profile.avatarId;
@@ -27,6 +36,7 @@ let selectedStoryLevel = getStoryLevel(Math.min(profile.unlockedLevel, STORY_LEV
 let lastMode = "ai";
 let lastRoomCode = "";
 let lastStartOptions = {};
+let selectedCodexId = "fire";
 
 const game = new RuneRivalsGame(ui, {
   onGameOver: (won, summary) => handleGameOver(won, summary),
@@ -41,7 +51,8 @@ const game = new RuneRivalsGame(ui, {
   }),
   onSpell: (_side, result) => audio.playSpell(result.type),
   onMatch: (combo) => audio.playMatch(combo),
-  onDrop: () => audio.playDrop()
+  onDrop: () => audio.playDrop(),
+  onHold: () => audio.playHold()
 });
 
 new InputController(
@@ -76,13 +87,23 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const codexButton = event.target.closest("[data-codex-spell]");
+  if (codexButton) {
+    selectedCodexId = codexButton.dataset.codexSpell;
+    renderCodexDetail();
+    audio.playMove();
+    return;
+  }
+
   const button = event.target.closest("[data-action]");
   if (!button) return;
   await audio.activate();
   const action = button.dataset.action;
 
   if (action === "show-duel") ui.showScreen("duel-screen");
-  if (action === "show-codex") ui.showScreen("codex-screen");
+  if (action === "show-leaderboard") showLeaderboard();
+  if (action === "refresh-leaderboard") loadLeaderboard(button);
+  if (action === "show-codex") showCodex();
   if (action === "show-story") showStory();
   if (action === "play-story") startStoryLevel(selectedStoryLevel.number);
   if (action === "next-story-level") startStoryLevel(Math.min(STORY_LEVELS.length, selectedStoryLevel.number + 1));
@@ -201,9 +222,13 @@ function handleGameOver(won, summary = game.getBattleSummary(won)) {
     renderResultStars(0, false);
   }
 
-  profile = recordBattle(profile, { won, mode: lastMode, summary });
+  const medals = battleMedals(summary, won);
+  const completedSummary = { ...summary, medalCount: medals.length };
+  profile = recordBattle(profile, { won, mode: lastMode, summary: completedSummary });
   renderMenuProfile();
-  renderBattleSummary(summary);
+  renderBattleSummary(completedSummary);
+  renderBattleMedals(medals);
+  renderLeagueAward();
   ui.announceResult(won, message);
 }
 
@@ -293,6 +318,13 @@ function selectStoryLevel(levelNumber) {
   document.querySelector("#story-description").textContent = selectedStoryLevel.description;
   document.querySelector("#story-quirk").textContent = selectedStoryLevel.quirk;
   const bestStars = Number(profile.storyStars?.[selectedStoryLevel.number] ?? 0);
+  document.querySelector("#story-objectives").innerHTML = [
+    "Win the duel",
+    "Finish with at least 50% health",
+    "Create a 2x chain or win within 1:30"
+  ].map((objective, index) => (
+    `<span class="${index < bestStars ? "earned" : ""}"><b>&#9733;</b>${objective}</span>`
+  )).join("");
   document.querySelector("#story-best-stars").textContent = bestStars
     ? `Best rating: ${starText(bestStars)}`
     : "Best rating: Not completed";
@@ -300,6 +332,144 @@ function selectStoryLevel(levelNumber) {
   document.querySelector("#story-play-button").disabled = selectedStoryLevel.number > profile.unlockedLevel;
   for (const node of document.querySelectorAll(".story-node")) {
     node.classList.toggle("selected", Number(node.dataset.level) === selectedStoryLevel.number);
+  }
+}
+
+function showCodex() {
+  renderCodex();
+  ui.showScreen("codex-screen");
+}
+
+function showLeaderboard() {
+  game.stop();
+  multiplayer.leave();
+  renderPersonalLeague({
+    name: profile.name,
+    avatarId: profile.avatarId,
+    mageRank: mageRank(profile),
+    leagueTier: "Rune Initiate",
+    leaguePoints: 0,
+    onlineWins: profile.onlineWins ?? 0,
+    podiums: 0,
+    bestStreak: 0
+  }, null);
+  document.querySelector("#league-podium").innerHTML = leaguePodiumPlaceholders();
+  document.querySelector("#league-list").innerHTML = "";
+  document.querySelector("#leaderboard-message").textContent = "Connecting to the Hall of Champions...";
+  ui.showScreen("leaderboard-screen");
+  loadLeaderboard();
+}
+
+async function loadLeaderboard(button) {
+  if (!multiplayer.configured) {
+    document.querySelector("#leaderboard-message").textContent =
+      "Firebase must be configured before online rankings can load.";
+    return;
+  }
+  if (button) setButtonBusy(button, true);
+  try {
+    const data = await leaderboard.fetch(profile);
+    renderLeaderboard(data);
+  } catch (error) {
+    document.querySelector("#leaderboard-message").textContent = error.message;
+  } finally {
+    if (button) setButtonBusy(button, false);
+  }
+}
+
+function renderLeaderboard({ entries, personal, personalRank }) {
+  renderPersonalLeague(personal, personalRank);
+  document.querySelector("#league-podium").innerHTML = [1, 0, 2].map((index) => {
+    const entry = entries[index];
+    const place = index + 1;
+    if (!entry) return `<div class="podium-place podium-${place} empty"><span>${place}</span><strong>Open</strong><small>Awaiting a champion</small></div>`;
+    return `<article class="podium-place podium-${place}">
+      <span>${place}</span>
+      <img src="${avatarDataUri(entry.avatarId)}" alt="">
+      <strong>${escapeHtml(entry.name)}</strong>
+      <small>${escapeHtml(entry.leagueTier)}</small>
+      <b>${entry.leaguePoints.toLocaleString()} LP</b>
+    </article>`;
+  }).join("");
+
+  const remaining = entries.slice(3);
+  document.querySelector("#league-list").innerHTML = remaining.map((entry, index) => `
+    <article class="league-row ${entry.uid === leaderboard.userId ? "you" : ""}">
+      <strong>${index + 4}</strong>
+      <div><img src="${avatarDataUri(entry.avatarId)}" alt=""><span><b>${escapeHtml(entry.name)}</b><small>${escapeHtml(entry.leagueTier)}</small></span></div>
+      <span>${entry.onlineWins}</span>
+      <b>${entry.leaguePoints.toLocaleString()}</b>
+    </article>
+  `).join("");
+  document.querySelector("#leaderboard-message").textContent = entries.length
+    ? `Showing the top ${entries.length} ranked mages.`
+    : "No ranked matches yet. The first crown can claim the hall.";
+}
+
+function renderPersonalLeague(entry, rank) {
+  const points = Number(entry.leaguePoints ?? 0);
+  document.querySelector("#league-personal-avatar").src = avatarDataUri(entry.avatarId ?? profile.avatarId);
+  document.querySelector("#league-personal-name").textContent = entry.name ?? profile.name;
+  document.querySelector("#league-personal-rank").textContent = rank ? `#${rank} Global` : "Unranked";
+  document.querySelector("#league-personal-tier").textContent = entry.leagueTier ?? leagueTier(points).name;
+  document.querySelector("#league-personal-points").textContent = points.toLocaleString();
+  document.querySelector("#league-personal-wins").textContent = Number(entry.onlineWins ?? 0);
+  document.querySelector("#league-personal-podiums").textContent = Number(entry.podiums ?? 0);
+  document.querySelector("#league-personal-streak").textContent = Number(entry.bestStreak ?? 0);
+}
+
+function leaguePodiumPlaceholders() {
+  return [2, 1, 3].map((place) => (
+    `<div class="podium-place podium-${place} empty"><span>${place}</span><strong>Open</strong><small>Awaiting a champion</small></div>`
+  )).join("");
+}
+
+function renderCodex() {
+  document.querySelector("#codex-spell-list").innerHTML = SPELL_CODEX.map((spell) => `
+    <button class="codex-spell-tab ${spell.id}" data-codex-spell="${spell.id}"
+      role="tab" aria-selected="${spell.id === selectedCodexId}">
+      <img src="${spell.icon}" alt="">
+      <span><strong>${spell.name}</strong><small>${spell.school}</small></span>
+    </button>
+  `).join("");
+  document.querySelector("#codex-glossary").innerHTML = CODEX_GLOSSARY.map((entry) => `
+    <div><dt>${entry.term}</dt><dd>${entry.definition}</dd></div>
+  `).join("");
+  renderCodexDetail();
+}
+
+function renderCodexDetail() {
+  const spell = getCodexSpell(selectedCodexId);
+  document.querySelector("#codex-detail").dataset.school = spell.id;
+  document.querySelector("#codex-detail-icon").src = spell.icon;
+  document.querySelector("#codex-detail-icon").alt = `${spell.school} spell rune`;
+  document.querySelector("#codex-detail-school").textContent = `${spell.school} school`;
+  document.querySelector("#codex-detail-name").textContent = spell.name;
+  document.querySelector("#codex-detail-summary").textContent = spell.summary;
+  document.querySelector("#codex-detail-trigger").textContent = spell.trigger;
+  document.querySelector("#codex-detail-self").textContent = spell.baseSelf;
+  document.querySelector("#codex-detail-rival").textContent = spell.baseRival;
+  document.querySelector("#codex-detail-timing").textContent = spell.timing;
+  document.querySelector("#codex-detail-tip").textContent = spell.tip;
+
+  const examples = spell.fixed
+    ? [{ label: "Full Focus", detail: "Fixed power", matchSize: 3, combo: 1 }]
+    : POWER_EXAMPLES;
+  document.querySelector("#codex-power-rows").innerHTML = examples.map((example) => {
+    const power = spell.fixed ? 1 : powerForExample(example);
+    const effect = spell.describe(power);
+    return `<tr>
+      <th><strong>${example.label}</strong><small>${example.detail}</small></th>
+      <td>${spell.fixed ? "Fixed" : `${power.toFixed(2)}x`}</td>
+      <td>${effect.self}</td>
+      <td>${effect.rival}</td>
+    </tr>`;
+  }).join("");
+
+  for (const button of document.querySelectorAll("[data-codex-spell]")) {
+    const selected = button.dataset.codexSpell === spell.id;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-selected", String(selected));
   }
 }
 
@@ -340,6 +510,55 @@ function renderBattleSummary(summary = {}) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = String(totalSeconds % 60).padStart(2, "0");
   document.querySelector("#result-time").textContent = `${minutes}:${seconds}`;
+}
+
+function battleMedals(summary = {}, won = false) {
+  const medals = [
+    won && Number(summary.hpPercent ?? 0) >= 75
+      ? { mark: "W", name: "Wardkeeper", detail: "Won above 75% health" }
+      : null,
+    Number(summary.largestCombo ?? 0) >= 3
+      ? { mark: "C", name: "Chainweaver", detail: "Created a 3x chain" }
+      : null,
+    Number(summary.surgeUses ?? 0) >= 1
+      ? { mark: "A", name: "Riftcaller", detail: "Cast Arcane Surge" }
+      : null,
+    won && Number(summary.elapsedMs ?? Infinity) <= 60000
+      ? { mark: "S", name: "Swift Victory", detail: "Won within one minute" }
+      : null,
+    Number(summary.spellsCast ?? 0) >= 8
+      ? { mark: "M", name: "Spellstorm", detail: "Cast eight spells" }
+      : null,
+    Number(summary.damageDealt ?? 0) >= 120
+      ? { mark: "D", name: "Devastator", detail: "Dealt 120 damage" }
+      : null
+  ];
+  return medals.filter(Boolean).slice(0, 4);
+}
+
+function renderBattleMedals(medals = []) {
+  const element = document.querySelector("#result-medals");
+  element.innerHTML = medals.length
+    ? medals.map((medal) => `<article title="${escapeHtml(medal.detail)}">
+      <span>${medal.mark}</span><div><strong>${medal.name}</strong><small>${medal.detail}</small></div>
+    </article>`).join("")
+    : `<p>Build longer chains, cast more spells, or finish faster to earn battle medals.</p>`;
+}
+
+function renderLeagueAward(result = null, error = "") {
+  const element = document.querySelector("#result-league-award");
+  element.classList.toggle("hidden", !result && !error);
+  if (error) {
+    element.innerHTML = `<span>League update paused</span><strong>${escapeHtml(error)}</strong>`;
+    return;
+  }
+  if (!result) {
+    element.replaceChildren();
+    return;
+  }
+  element.innerHTML = result.loading
+    ? `<span>Arcane League</span><strong>Recording match result...</strong>`
+    : `<span>${escapeHtml(result.entry.leagueTier)}</span><strong>+${result.award} League Points</strong><small>${result.entry.leaguePoints.toLocaleString()} total</small>`;
 }
 
 function starText(count) {
@@ -412,18 +631,35 @@ function onlineHandlers() {
       game.setOnlineTarget(target, avatarDataUri(target.avatarId));
     },
     onAttack: (attack) => game.receiveAttack(attack),
-    onResult: ({ place, totalPlayers, won }) => {
+    onResult: async ({ place, totalPlayers, won, roomCode, playerId, finishedAt }) => {
       const summary = game.getBattleSummary(won);
+      const medals = battleMedals(summary, won);
+      const completedSummary = { ...summary, medalCount: medals.length };
       game.stop();
       if (won) audio.playVictory();
       else audio.playDefeat();
-      profile = recordBattle(profile, { won, mode: "online", summary });
+      profile = recordBattle(profile, { won, mode: "online", summary: completedSummary });
       renderMenuProfile();
-      renderBattleSummary(summary);
+      renderBattleSummary(completedSummary);
+      renderBattleMedals(medals);
       renderResultStars(0, false);
       hideStoryResultButtons();
       document.querySelector('[data-action="rematch"]').classList.add("hidden");
       ui.announcePlacement(place, totalPlayers);
+      renderLeagueAward({ loading: true });
+      try {
+        const leagueResult = await leaderboard.submitMatch(profile, {
+          place,
+          totalPlayers,
+          roomCode,
+          playerId,
+          finishedAt
+        });
+        if (leagueResult.duplicate) renderLeagueAward();
+        else renderLeagueAward(leagueResult);
+      } catch (error) {
+        renderLeagueAward(null, error.message);
+      }
     },
     onRoomClosed: () => {
       if (lastMode === "online" && game.running) game.stop();

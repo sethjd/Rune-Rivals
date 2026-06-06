@@ -1,4 +1,4 @@
-const CACHE_NAME = "rune-rivals-v12";
+const CACHE_NAME = "rune-rivals-v14";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -13,6 +13,7 @@ const APP_SHELL = [
   "./src/multiplayer.js",
   "./src/multiplayer-logic.js",
   "./src/firebase-config.js",
+  "./src/firebase.js",
   "./src/input.js",
   "./src/ui.js",
   "./src/pwa.js",
@@ -20,6 +21,8 @@ const APP_SHELL = [
   "./src/profile.js",
   "./src/story.js",
   "./src/audio.js",
+  "./src/codex.js",
+  "./src/leaderboard.js",
   "./manifest.webmanifest",
   "./assets/icons/app-icon.svg",
   "./assets/icons/app-icon-maskable.svg",
@@ -38,6 +41,8 @@ const APP_SHELL = [
   "./assets/runes/junk.svg",
   "./assets/backgrounds/duel-arena.svg",
   "./assets/backgrounds/arcane-cathedral.webp",
+  "./assets/backgrounds/spell-codex-v2.webp",
+  "./assets/backgrounds/arcane-league.webp",
   "./assets/spells/fireball.svg",
   "./assets/spells/cleanse.svg",
   "./assets/spells/shield.svg",

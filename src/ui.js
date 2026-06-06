@@ -37,6 +37,11 @@ export class GameUI {
     this.renderFighter("enemy", game.enemy);
     this.renderNext(document.querySelector("#player-next"), game.playerNext);
     this.renderNext(document.querySelector("#enemy-next"), game.enemyNext);
+    this.renderNext(document.querySelector("#player-hold"), game.playerHold);
+    this.renderNext(document.querySelector("#enemy-hold"), game.enemyHold);
+    const holdButton = document.querySelector("#hold-button");
+    holdButton.disabled = game.holdUsed.player || game.resolving || game.over || game.paused;
+    holdButton.classList.toggle("used", game.holdUsed.player);
     this.renderSurge(game);
     this.renderDanger(game);
     document.querySelector("#battle-status").textContent = game.paused
@@ -44,7 +49,11 @@ export class GameUI {
       : game.mode === "online" && game.over
         ? "Confirming Result..."
         : "Rune Duel";
-    if (game.mode !== "online") document.querySelector("#target-status").textContent = "";
+    if (game.mode !== "online") {
+      document.querySelector("#target-status").textContent = game.mode === "story"
+        ? "STAR GOALS: WIN / FINISH AT 50% HP / 2X CHAIN OR UNDER 1:30"
+        : "";
+    }
     this.pauseOverlay.classList.toggle("hidden", !game.paused);
   }
 
@@ -66,10 +75,30 @@ export class GameUI {
 
   renderBoard(element, board, activePiece, active) {
     const display = board.grid.map((row) => [...row]);
+    const activeKeys = new Set();
+    const ghostRunes = new Map();
     if (activePiece) {
       for (const cell of activePiece.cells()) {
         if (cell.y >= 0 && cell.y < BOARD_HEIGHT && cell.x >= 0 && cell.x < BOARD_WIDTH) {
           display[cell.y][cell.x] = cell.type;
+          activeKeys.add(`${cell.x},${cell.y}`);
+        }
+      }
+      if (active) {
+        const ghost = activePiece.clone();
+        while (board.canPlace(ghost.cells(ghost.x, ghost.y + 1, ghost.rotation))) ghost.y += 1;
+        for (const cell of ghost.cells()) {
+          const key = `${cell.x},${cell.y}`;
+          if (
+            cell.y >= 0 &&
+            cell.y < BOARD_HEIGHT &&
+            cell.x >= 0 &&
+            cell.x < BOARD_WIDTH &&
+            board.grid[cell.y][cell.x] === null &&
+            !activeKeys.has(key)
+          ) {
+            ghostRunes.set(key, cell.type);
+          }
         }
       }
     }
@@ -81,13 +110,19 @@ export class GameUI {
         const index = y * BOARD_WIDTH + x;
         const cellElement = cells[index];
         const type = display[y][x];
+        const key = `${x},${y}`;
+        const ghostType = ghostRunes.get(key);
         cellElement.className = "cell";
         cellElement.style.backgroundImage = "";
-        if (type && RUNE_DATA[type]) {
+        if (ghostType && RUNE_DATA[ghostType] && !type) {
+          cellElement.classList.add("rune", `rune-${ghostType}`, "ghost-rune");
+          cellElement.style.backgroundImage = `url("${RUNE_DATA[ghostType].icon}")`;
+        } else if (type && RUNE_DATA[type]) {
           cellElement.classList.add("rune", `rune-${type}`);
           cellElement.style.backgroundImage = `url("${RUNE_DATA[type].icon}")`;
         }
-        if (board.highlighted.has(`${x},${y}`)) cellElement.classList.add("matched");
+        if (activeKeys.has(key)) cellElement.classList.add("active-rune");
+        if (board.highlighted.has(key)) cellElement.classList.add("matched");
       }
     }
   }

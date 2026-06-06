@@ -20,11 +20,15 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Firebase Realtime Database room creation and joining
 - Host-controlled online waiting rooms for 2-6 players
 - Ring-based attacks, elimination retargeting, and final placement results
+- Anonymous Firebase accounts for persistent online identity
+- Arcane League rankings with points, crowns, podiums, and win streaks
+- Match-linked leaderboard updates that reject duplicate and older room results
 - Arcane Surge ultimate ability charged by spellcasting
 - Mage XP, levels, ranks, wins, best-combo records, and persistent mastery
 - Three-star story ratings based on health, speed, and combo performance
 - Apprentice, Rival, and Archmage quick-duel tiers
 - A complete in-game Spell Codex and detailed battle summaries
+- Earnable battle medals for health, speed, chains, spell volume, and damage
 - Premium painted arena art, danger warnings, damage numbers, and a refined battle HUD
 - Responsive desktop, portrait-phone, and landscape-phone layouts
 - Keyboard and large touch controls
@@ -63,33 +67,18 @@ Online mode stays disabled with a friendly message until a real Firebase config 
 2. In the project overview, add a **Web app**.
 3. Open **Build → Realtime Database** and create a database.
 4. Choose a database location close to your players.
-5. Copy the web app configuration values into `src/firebase-config.js`.
-6. Make sure `databaseURL` exactly matches the URL shown by Realtime Database.
-7. Add database rules before testing.
+5. Open **Build → Authentication → Sign-in method** and enable **Anonymous**.
+6. Copy the web app configuration values into `src/firebase-config.js`.
+7. Make sure `databaseURL` exactly matches the URL shown by Realtime Database.
+8. Add database rules before testing.
 
 The config object is a public web-client identifier, not an admin secret. Never add Firebase Admin SDK credentials or service-account JSON to this repository.
 
-### Prototype Database Rules
+### Database Rules
 
-The included `firebase-rules.json` allows anyone who knows a room code to read and write that room:
+Paste the included `firebase-rules.json` into **Realtime Database → Rules**, then publish it. The rules require an authenticated anonymous account for online rooms, allow public leaderboard reads, and only let a player update their own ranking with a newer recorded placement that contains the same Firebase account.
 
-```json
-{
-  "rules": {
-    "rooms": {
-      "$roomCode": {
-        ".read": true,
-        ".write": true,
-        ".validate": "newData.hasChildren(['status', 'players'])"
-      }
-    }
-  }
-}
-```
-
-Paste these into **Realtime Database → Rules**, then publish them.
-
-These rules are intentionally permissive for early private testing. They are not suitable for a public production game. A production version should use Firebase Authentication, validate every field, limit room creation, reject stale writes, and automatically remove expired rooms.
+This is stronger than the original open-room prototype, but the simulation still runs in browsers. A commercial competitive version should calculate rankings in a trusted Cloud Function or game server, rate-limit room creation, and automatically remove expired rooms.
 
 ## Deploy to GitHub Pages
 
@@ -152,7 +141,8 @@ assets/
 
 ## Prototype Limitations
 
-- Online rooms support up to six players but still have no authentication or anti-cheat protection.
+- Online rooms and leaderboard writes require Firebase Anonymous Authentication.
+- Leaderboard updates are validated against finished rooms, but the browser-hosted match simulation is not fully server-authoritative.
 - A disconnected player is skipped by the targeting ring; reconnecting to the same seat is not supported yet.
 - Simultaneous online attacks use lightweight event queues rather than a server-authoritative simulation.
 - Online rematches return both players to the menu.

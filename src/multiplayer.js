@@ -1,4 +1,5 @@
-import { firebaseConfig, hasFirebaseConfig } from "./firebase-config.js";
+import { hasFirebaseConfig } from "./firebase-config.js";
+import { initializeFirebase } from "./firebase.js";
 import {
   disconnectedTooLong,
   eliminatePlayer,
@@ -9,9 +10,6 @@ import {
   roomPlayers
 } from "./multiplayer-logic.js";
 
-const FIREBASE_VERSION = "10.12.5";
-const APP_URL = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`;
-const DB_URL = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-database.js`;
 const DISCONNECT_GRACE_MS = 15000;
 const ROOM_TRANSACTION_ATTEMPTS = 5;
 const wait = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
@@ -39,13 +37,10 @@ export class MultiplayerClient {
   async initialize() {
     if (!this.configured) throw new Error("Firebase has not been configured yet.");
     if (this.db) return;
-
-    const [{ initializeApp }, databaseModule] = await Promise.all([
-      import(APP_URL),
-      import(DB_URL)
-    ]);
+    const { db, databaseModule, user } = await initializeFirebase({ authenticate: true });
     this.api = databaseModule;
-    this.db = databaseModule.getDatabase(initializeApp(firebaseConfig));
+    this.db = db;
+    this.authUid = user.uid;
   }
 
   async createRoom(profile, handlers) {
@@ -65,7 +60,7 @@ export class MultiplayerClient {
         1: this.playerId
       },
       players: {
-        [this.playerId]: playerRecord(profile, 1)
+        [this.playerId]: playerRecord(profile, 1, this.authUid)
       }
     });
 
@@ -106,7 +101,7 @@ export class MultiplayerClient {
     const playerRef = ref(this.db, `rooms/${this.roomCode}/players/${this.playerId}`);
 
     try {
-      await set(playerRef, playerRecord(profile, seat));
+      await set(playerRef, playerRecord(profile, seat, this.authUid));
       const confirmed = await get(roomRef);
       const confirmedRoom = confirmed.val();
       if (!confirmedRoom || confirmedRoom.status !== "waiting") {
@@ -225,7 +220,7 @@ export class MultiplayerClient {
       }));
     };
 
-    for (const key of ["status", "hostId", "playerCount", "winnerId", "players"]) watch(key);
+    for (const key of ["status", "hostId", "playerCount", "winnerId", "finishedAt", "players"]) watch(key);
 
     this.unsubscribers.push(onChildAdded(attacksRef, (snapshot) => {
       if (token !== this.sessionToken) return;
@@ -261,6 +256,7 @@ export class MultiplayerClient {
       hostId: this.roomMeta.hostId,
       playerCount: this.roomMeta.playerCount,
       winnerId: this.roomMeta.winnerId,
+      finishedAt: this.roomMeta.finishedAt,
       players: this.roomMeta.players
     };
 
@@ -439,12 +435,16 @@ export class MultiplayerClient {
   deliverResult(room) {
     if (this.resultDelivered) return;
     const self = room.players?.[this.playerId];
-    if (!self?.placement) return;
+    const resultAt = self?.placement === 1 ? room.finishedAt : self?.eliminatedAt;
+    if (!self?.placement || !resultAt || !room.playerCount) return;
     this.resultDelivered = true;
     this.handlers?.onResult?.({
       place: self.placement,
       totalPlayers: room.playerCount ?? roomPlayers(room).length,
-      won: self.placement === 1
+      won: self.placement === 1,
+      roomCode: this.roomCode,
+      playerId: this.playerId,
+      finishedAt: resultAt
     });
   }
 
@@ -638,7 +638,7 @@ function stateFingerprint(state) {
   return JSON.stringify(stableState);
 }
 
-function playerRecord(profile, seat) {
+function playerRecord(profile, seat, authUid) {
   return {
     name: String(profile?.name || "Player").slice(0, 16),
     avatarId: profile?.avatarId || "violet-hood",
@@ -646,6 +646,7 @@ function playerRecord(profile, seat) {
     connected: true,
     alive: true,
     placement: null,
+    authUid,
     joinedAt: Date.now(),
     updatedAt: Date.now()
   };

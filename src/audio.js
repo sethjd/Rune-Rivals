@@ -50,6 +50,11 @@ export class AudioManager {
     this.tone(120, 0.12, "triangle", 0.1, -55);
   }
 
+  playHold() {
+    this.tone(260, 0.12, "sine", 0.07, 180);
+    window.setTimeout(() => this.tone(440, 0.1, "triangle", 0.05, -80), 55);
+  }
+
   playMatch(combo = 1) {
     const root = 330 * Math.min(1.5, 1 + (combo - 1) * 0.15);
     [root, root * 1.25, root * 1.5].forEach((frequency, index) => {

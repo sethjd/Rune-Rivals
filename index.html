@@ -58,6 +58,7 @@
           <button class="primary-button" data-action="show-duel">Quick Duel</button>
           <button data-action="create-room">Create Online Room</button>
           <button data-action="show-join">Join Online Room</button>
+          <button data-action="show-leaderboard">Arcane League</button>
           <button data-action="show-codex">Spell Codex</button>
           <button class="text-button" data-action="show-help">How to Play</button>
         </div>
@@ -91,20 +92,98 @@
         </div>
       </section>
 
+      <section id="leaderboard-screen" class="screen panel-screen" aria-labelledby="leaderboard-title">
+        <div class="panel leaderboard-panel">
+          <div class="leaderboard-hero">
+            <p class="eyebrow">Online Hall of Champions</p>
+            <h2 id="leaderboard-title">Arcane League</h2>
+            <p>Finish online elimination matches to earn League Points. Larger rooms award more points.</p>
+          </div>
+          <div class="leaderboard-content">
+            <section class="league-personal" aria-labelledby="personal-league-title">
+              <img id="league-personal-avatar" alt="">
+              <div>
+                <p class="eyebrow">Your standing</p>
+                <h3 id="personal-league-title"><span id="league-personal-name">Player</span> <small id="league-personal-rank">Unranked</small></h3>
+                <p id="league-personal-tier">Rune Initiate</p>
+              </div>
+              <div class="league-personal-points"><strong id="league-personal-points">0</strong><span>League Points</span></div>
+              <dl>
+                <div><dt>Crowns</dt><dd id="league-personal-wins">0</dd></div>
+                <div><dt>Podiums</dt><dd id="league-personal-podiums">0</dd></div>
+                <div><dt>Best Streak</dt><dd id="league-personal-streak">0</dd></div>
+              </dl>
+            </section>
+            <section class="league-board" aria-label="Global rankings">
+              <div id="league-podium" class="league-podium"></div>
+              <div class="league-list-heading">
+                <span>Rank</span><span>Mage</span><span>Crowns</span><span>Points</span>
+              </div>
+              <div id="league-list" class="league-list" aria-live="polite"></div>
+              <p id="leaderboard-message" class="form-message">Connecting to the Hall of Champions...</p>
+            </section>
+            <aside class="league-rules">
+              <p class="eyebrow">Scoring</p>
+              <h3>Claim the Crown</h3>
+              <div><strong>1st</strong><span>100 points, plus 20 for every rival beyond two players</span></div>
+              <div><strong>2nd</strong><span>15 points in a duel, or 55+ in larger rooms</span></div>
+              <div><strong>3rd</strong><span>25+ points in rooms with at least three players</span></div>
+              <div><strong>Survive</strong><span>Every other completed placement earns 10 points</span></div>
+              <p>Rankings are all-time during this prototype season.</p>
+            </aside>
+          </div>
+          <div class="row-actions leaderboard-actions">
+            <button id="leaderboard-refresh" class="primary-button" data-action="refresh-leaderboard">Refresh Rankings</button>
+            <button data-action="back-menu">Return to Menu</button>
+          </div>
+        </div>
+      </section>
+
       <section id="codex-screen" class="screen panel-screen" aria-labelledby="codex-title">
         <div class="panel codex-panel">
-          <p class="eyebrow">The six schools</p>
-          <h2 id="codex-title">Spell Codex</h2>
-          <p class="panel-intro">Build connected groups of three or more. Larger groups and chain reactions multiply every spell.</p>
-          <div class="codex-grid">
-            <article class="codex-card fire"><img src="./assets/runes/fire.svg" alt=""><div><strong>Fireball</strong><span>Heavy direct damage</span></div></article>
-            <article class="codex-card water"><img src="./assets/runes/water.svg" alt=""><div><strong>Cleanse</strong><span>Removes junk and adds pressure</span></div></article>
-            <article class="codex-card earth"><img src="./assets/runes/earth.svg" alt=""><div><strong>Stone Ward</strong><span>Builds a shield and strikes</span></div></article>
-            <article class="codex-card air"><img src="./assets/runes/air.svg" alt=""><div><strong>Gust</strong><span>Clears your highest tiles</span></div></article>
-            <article class="codex-card lightning"><img src="./assets/runes/lightning.svg" alt=""><div><strong>Chain Bolt</strong><span>Damage plus immediate junk</span></div></article>
-            <article class="codex-card shadow"><img src="./assets/runes/shadow.svg" alt=""><div><strong>Curse</strong><span>Damage plus delayed junk</span></div></article>
-            <article class="codex-card arcane"><img src="./assets/spells/arcane-surge.svg" alt=""><div><strong>Arcane Surge</strong><span>Charge through spellcasting, then unleash damage, shield, and cleansing</span></div></article>
+          <div class="codex-hero">
+            <p class="eyebrow">Seven forms of rune craft</p>
+            <h2 id="codex-title">Spell Codex</h2>
+            <p>Choose a spell to see exactly what it does and how larger matches change its power.</p>
           </div>
+          <div class="codex-workspace">
+            <nav id="codex-spell-list" class="codex-spell-list" aria-label="Spell schools"></nav>
+            <article id="codex-detail" class="codex-detail" aria-live="polite">
+              <header class="codex-detail-heading">
+                <img id="codex-detail-icon" src="./assets/runes/fire.svg" alt="">
+                <div>
+                  <p id="codex-detail-school" class="eyebrow">Fire school</p>
+                  <h3 id="codex-detail-name">Fireball</h3>
+                  <p id="codex-detail-summary"></p>
+                </div>
+              </header>
+              <div class="codex-trigger">
+                <span>How to cast</span>
+                <strong id="codex-detail-trigger"></strong>
+              </div>
+              <div class="codex-base-effects">
+                <div><span>Effect on you</span><strong id="codex-detail-self"></strong></div>
+                <div><span>Effect on rival</span><strong id="codex-detail-rival"></strong></div>
+                <div><span>Timing</span><strong id="codex-detail-timing"></strong></div>
+              </div>
+              <div class="codex-table-wrap">
+                <table class="codex-power-table">
+                  <thead><tr><th>Cast</th><th>Power</th><th>You</th><th>Rival</th></tr></thead>
+                  <tbody id="codex-power-rows"></tbody>
+                </table>
+              </div>
+              <p class="codex-tip"><span>Tactical note</span><strong id="codex-detail-tip"></strong></p>
+            </article>
+          </div>
+          <section class="codex-rules" aria-labelledby="codex-rules-title">
+            <div>
+              <p class="eyebrow">Power rules</p>
+              <h3 id="codex-rules-title">Matches and Chains</h3>
+              <p>A Match 4 is 35% stronger and a Match 5 is 70% stronger. A second chain is 1.8x power; the third and later chains are 2.7x.</p>
+              <p>Match size and chain bonuses multiply together. Story quirks can add another boost.</p>
+            </div>
+            <dl id="codex-glossary" class="codex-glossary"></dl>
+          </section>
           <button class="primary-button" data-action="back-menu">Close Codex</button>
         </div>
       </section>
@@ -148,8 +227,9 @@
           <div>
             <p id="story-level-label" class="eyebrow">Level 1</p>
             <h3 id="story-opponent-name">The Gatekeeper</h3>
-            <p id="story-description">Choose a level on the path.</p>
+          <p id="story-description">Choose a level on the path.</p>
           <p id="story-quirk" class="story-quirk"></p>
+          <div id="story-objectives" class="story-objectives" aria-label="Star objectives"></div>
           <p id="story-best-stars" class="story-best-stars">Best: Not completed</p>
           </div>
           <button id="story-play-button" class="primary-button" data-action="play-story">Begin Duel</button>
@@ -197,7 +277,7 @@
             <div><img src="./assets/runes/lightning.svg" alt=""><b>Lightning</b><span>7 damage + 2 junk</span></div>
             <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>3 delayed junk</span></div>
           </div>
-          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, S casts Arcane Surge, and P pauses.</p>
+          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, C holds a piece, S casts Arcane Surge, and P pauses.</p>
           <button class="primary-button" data-action="back-menu">Got it</button>
         </div>
       </section>
@@ -233,7 +313,12 @@
               <div id="player-board" class="board" aria-label="Player rune board"></div>
               <div id="player-spell" class="spell-popup" aria-live="polite"></div>
             </div>
-            <div class="next-piece-row"><span>UP NEXT</span><div id="player-next" class="next-piece" aria-label="Next piece"></div></div>
+            <div class="next-piece-row">
+              <button id="hold-button" class="piece-preview hold-preview" data-control="hold" aria-label="Hold or swap the current piece">
+                <span>HOLD</span><span id="player-hold" class="next-piece" aria-label="Held piece"></span>
+              </button>
+              <div class="piece-preview"><span>UP NEXT</span><div id="player-next" class="next-piece" aria-label="Next piece"></div></div>
+            </div>
           </article>
 
           <div class="duel-center" aria-hidden="true">
@@ -254,7 +339,10 @@
               <div id="enemy-board" class="board enemy-board" aria-label="Opponent rune board"></div>
               <div id="enemy-spell" class="spell-popup" aria-live="polite"></div>
             </div>
-            <div class="next-piece-row enemy-next-row"><span>UP NEXT</span><div id="enemy-next" class="next-piece" aria-label="Opponent next piece"></div></div>
+            <div class="next-piece-row enemy-next-row">
+              <div class="piece-preview"><span>HOLD</span><div id="enemy-hold" class="next-piece" aria-label="Opponent held piece"></div></div>
+              <div class="piece-preview"><span>UP NEXT</span><div id="enemy-next" class="next-piece" aria-label="Opponent next piece"></div></div>
+            </div>
           </article>
         </div>
 
@@ -293,6 +381,8 @@
             <div><span>Best Combo</span><strong id="result-combo">1x</strong></div>
             <div><span>Time</span><strong id="result-time">0:00</strong></div>
           </div>
+          <div id="result-league-award" class="result-league-award hidden" aria-live="polite"></div>
+          <div id="result-medals" class="result-medals" aria-label="Battle medals"></div>
           <button class="primary-button" data-action="rematch">Rematch</button>
           <button id="next-level-button" class="primary-button hidden" data-action="next-story-level">Next Level</button>
           <button id="story-map-button" class="hidden" data-action="show-story">Story Map</button>

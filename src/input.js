@@ -23,6 +23,8 @@ export class InputController {
       ArrowUp: "rotate",
       ArrowDown: "down",
       " ": "hard-drop",
+      c: "hold",
+      C: "hold",
       s: "surge",
       S: "surge"
     };

@@ -40,7 +40,8 @@ export function loadProfile() {
     onlineWins: 0,
     battles: 0,
     bestCombo: 0,
-    totalDamage: 0
+    totalDamage: 0,
+    medals: 0
   };
 
   try {
@@ -98,7 +99,8 @@ export function recordBattle(profile, {
     wins: Math.max(0, Number(profile.wins ?? 0)) + (won ? 1 : 0),
     onlineWins: Math.max(0, Number(profile.onlineWins ?? 0)) + (won && mode === "online" ? 1 : 0),
     bestCombo: Math.max(Number(profile.bestCombo ?? 0), Number(summary.largestCombo ?? 0)),
-    totalDamage: Math.max(0, Number(profile.totalDamage ?? 0)) + Math.max(0, Number(summary.damageDealt ?? 0))
+    totalDamage: Math.max(0, Number(profile.totalDamage ?? 0)) + Math.max(0, Number(summary.damageDealt ?? 0)),
+    medals: Math.max(0, Number(profile.medals ?? 0)) + Math.max(0, Number(summary.medalCount ?? 0))
   });
 }
 

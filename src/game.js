@@ -16,7 +16,8 @@ export class RuneRivalsGame {
     onAttack,
     onSpell,
     onMatch,
-    onDrop
+    onDrop,
+    onHold
   } = {}) {
     this.ui = ui;
     this.onGameOver = onGameOver;
@@ -26,6 +27,7 @@ export class RuneRivalsGame {
     this.onSpell = onSpell;
     this.onMatch = onMatch;
     this.onDrop = onDrop;
+    this.onHold = onHold;
     this.ai = new RuneAI("normal");
     this.loop = this.loop.bind(this);
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -43,8 +45,11 @@ export class RuneRivalsGame {
     this.applyBattleRules(options.rules ?? {});
     this.playerPiece = new RunePiece();
     this.playerNext = new RunePiece();
+    this.playerHold = null;
     this.enemyPiece = new RunePiece();
     this.enemyNext = new RunePiece();
+    this.enemyHold = null;
+    this.holdUsed = { player: false, enemy: false };
     this.dropTimers = { player: 0, enemy: 0 };
     this.controlledSide = "player";
     this.paused = false;
@@ -172,6 +177,7 @@ export class RuneRivalsGame {
     if (action === "down" && !this.move(side, 0, 1)) this.lockPiece(side);
     if (action === "rotate") this.rotate(side);
     if (action === "hard-drop") this.hardDrop(side);
+    if (action === "hold") this.holdPiece(side);
     if (action === "surge") this.castSurge();
   }
 
@@ -205,6 +211,36 @@ export class RuneRivalsGame {
       this.dropTimers[side] = 0;
     }
     this.lockPiece(side);
+  }
+
+  holdPiece(side = "player") {
+    if (this.holdUsed[side] || this.resolving || this.over) return false;
+    const current = this.getPiece(side);
+    if (!current) return false;
+
+    const held = side === "player" ? this.playerHold : this.enemyHold;
+    const replacement = held
+      ? new RunePiece([...held.runes])
+      : side === "player"
+        ? this.playerNext
+        : this.enemyNext;
+    const newHold = new RunePiece([...current.runes]);
+
+    if (side === "player") {
+      this.playerHold = newHold;
+      this.playerPiece = replacement;
+      if (!held) this.playerNext = new RunePiece(randomRunePair());
+    } else {
+      this.enemyHold = newHold;
+      this.enemyPiece = replacement;
+      if (!held) this.enemyNext = new RunePiece(randomRunePair());
+    }
+
+    this.holdUsed[side] = true;
+    this.dropTimers[side] = 0;
+    if (!this.getBoard(side).canPlace(replacement.cells())) this.handleOverflow(side);
+    this.onHold?.(side);
+    return true;
   }
 
   async lockPiece(side) {
@@ -363,6 +399,10 @@ export class RuneRivalsGame {
     const hpBefore = this.enemy.hp;
     applyDamage(this.enemy, SURGE_VALUES.damage);
     const damage = Math.max(0, hpBefore - this.enemy.hp);
+    if (this.mode !== "online") {
+      const overflowed = this.enemyBoard.addJunk(SURGE_VALUES.junk);
+      if (overflowed) this.handleOverflow("enemy");
+    }
     const result = {
       type: "arcane",
       label: "ARCANE SURGE!",
@@ -403,6 +443,7 @@ export class RuneRivalsGame {
       this.enemyPiece = this.enemyNext;
       this.enemyNext = new RunePiece(randomRunePair());
     }
+    this.holdUsed[side] = false;
 
     const board = this.getBoard(side);
     const piece = this.getPiece(side);
@@ -471,6 +512,7 @@ export class RuneRivalsGame {
     this.enemy.focus = state.focus ?? this.enemy.focus;
     this.enemyPiece = state.currentPiece ? RunePiece.from(state.currentPiece) : null;
     this.enemyNext = state.nextPiece ? RunePiece.from(state.nextPiece) : null;
+    this.enemyHold = state.holdPiece ? RunePiece.from(state.holdPiece) : null;
     this.checkGameOver();
   }
 
@@ -498,6 +540,7 @@ export class RuneRivalsGame {
       board: this.playerBoard.serialize(),
       currentPiece: this.playerPiece?.serialize() ?? null,
       nextPiece: this.playerNext?.serialize() ?? null,
+      holdPiece: this.playerHold?.serialize() ?? null,
       hp: this.player.hp,
       maxHp: this.player.maxHp,
       shield: this.player.shield,
