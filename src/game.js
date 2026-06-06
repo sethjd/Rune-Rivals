@@ -7,9 +7,18 @@ import { applyDamage, applyIncomingAttack, castSpell, createFighter } from "./sp
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export class RuneRivalsGame {
-  constructor(ui, { onGameOver, onNetworkSync, onAttack, onSpell, onMatch, onDrop } = {}) {
+  constructor(ui, {
+    onGameOver,
+    onLocalEliminated,
+    onNetworkSync,
+    onAttack,
+    onSpell,
+    onMatch,
+    onDrop
+  } = {}) {
     this.ui = ui;
     this.onGameOver = onGameOver;
+    this.onLocalEliminated = onLocalEliminated;
     this.onNetworkSync = onNetworkSync;
     this.onAttack = onAttack;
     this.onSpell = onSpell;
@@ -37,9 +46,11 @@ export class RuneRivalsGame {
     this.paused = false;
     this.over = false;
     this.resolving = false;
+    this.pendingAttacks = [];
     this.running = false;
     this.lastTime = 0;
     this.syncTimer = 0;
+    this.currentOnlineTargetId = "";
     this.ai.configure({
       difficulty: options.aiDifficulty ?? (mode === "ai" ? "easy" : "normal"),
       speed: options.rules?.aiSpeed,
@@ -75,7 +86,7 @@ export class RuneRivalsGame {
 
       if (this.mode === "online") {
         this.syncTimer += delta;
-        if (this.syncTimer >= 220) {
+        if (this.syncTimer >= 300) {
           this.syncTimer = 0;
           this.onNetworkSync?.(this.serializeLocal());
         }
@@ -140,36 +151,52 @@ export class RuneRivalsGame {
   async lockPiece(side) {
     if (this.resolving || this.over) return;
     this.resolving = true;
-    this.onDrop?.(side);
-    const board = this.getBoard(side);
-    const fighter = this.getFighter(side);
-    const piece = this.getPiece(side);
-    const overflowed = board.lock(piece.cells());
+    let pieceLocked = false;
+    try {
+      this.onDrop?.(side);
+      const board = this.getBoard(side);
+      const fighter = this.getFighter(side);
+      const piece = this.getPiece(side);
+      const overflowed = board.lock(piece.cells());
+      pieceLocked = true;
 
-    if (overflowed) this.handleOverflow(side);
+      if (overflowed) this.handleOverflow(side);
 
-    if (fighter.junkQueue > 0) {
-      const junkOverflow = board.addJunk(fighter.junkQueue);
-      fighter.junkQueue = 0;
-      if (junkOverflow) this.handleOverflow(side);
-    }
-
-    await board.resolveMatches({
-      onHighlight: async (groups, combo) => {
-        this.onMatch?.(combo, groups);
-        this.ui.render(this);
-        await wait(230);
-      },
-      onClear: async (groups, combo) => {
-        for (const group of groups) this.castForSide(side, group.type, combo, group.cells.length);
-        this.ui.render(this);
-        await wait(150);
+      if (fighter.junkQueue > 0) {
+        const junkOverflow = board.addJunk(fighter.junkQueue);
+        fighter.junkQueue = 0;
+        if (junkOverflow) this.handleOverflow(side);
       }
-    });
 
-    this.spawnNext(side);
-    this.resolving = false;
-    this.checkGameOver();
+      await board.resolveMatches({
+        onHighlight: async (groups, combo) => {
+          this.onMatch?.(combo, groups);
+          this.ui.render(this);
+          await wait(230);
+        },
+        onClear: async (groups, combo) => {
+          for (const group of groups) this.castForSide(side, group.type, combo, group.cells.length);
+          this.ui.render(this);
+          await wait(150);
+        }
+      });
+
+      this.spawnNext(side);
+      pieceLocked = false;
+    } catch (error) {
+      console.error("Could not finish resolving the placed runes.", error);
+      if (pieceLocked) {
+        try {
+          this.spawnNext(side);
+        } catch (spawnError) {
+          console.error("Could not prepare the next rune piece.", spawnError);
+        }
+      }
+    } finally {
+      this.resolving = false;
+      this.applyPendingAttacks();
+      this.checkGameOver();
+    }
   }
 
   placeAIPiece(placement) {
@@ -227,11 +254,37 @@ export class RuneRivalsGame {
   }
 
   receiveAttack(attack) {
+    if (!attack || this.over) return;
+    if (this.resolving) {
+      this.pendingAttacks.push(attack);
+      return;
+    }
+    this.applyIncomingAttackNow(attack);
+  }
+
+  applyPendingAttacks() {
+    if (!this.pendingAttacks.length || this.over) return;
+    const attacks = this.pendingAttacks.splice(0);
+    for (const attack of attacks) {
+      if (this.over) break;
+      this.applyIncomingAttackNow(attack);
+    }
+  }
+
+  applyIncomingAttackNow(attack) {
     const overflowed = applyIncomingAttack(attack, this.player, this.playerBoard);
     if (overflowed) this.handleOverflow("player");
     const result = {
       type: attack.type ?? (attack.kind === "curse" ? "shadow" : attack.kind === "lightning" ? "lightning" : "fire"),
-      label: attack.type ? `${attack.type.toUpperCase()} SURGE!` : attack.kind === "curse" ? "CURSE!" : attack.kind === "lightning" ? "CHAIN BOLT!" : "FIREBALL!",
+      label: `${attack.attackerName ?? "RIVAL"}: ${
+        attack.type
+          ? `${attack.type.toUpperCase()} SURGE!`
+          : attack.kind === "curse"
+            ? "CURSE!"
+            : attack.kind === "lightning"
+              ? "CHAIN BOLT!"
+              : "FIREBALL!"
+      }`,
       combo: 1,
       matchSize: 3
     };
@@ -244,11 +297,31 @@ export class RuneRivalsGame {
     if (!state || this.mode !== "online") return;
     this.enemyBoard.load(state.board);
     this.enemy.hp = state.hp ?? this.enemy.hp;
+    this.enemy.maxHp = state.maxHp ?? this.enemy.maxHp;
     this.enemy.shield = state.shield ?? this.enemy.shield;
     this.enemy.junkQueue = state.junkQueue ?? this.enemy.junkQueue;
     this.enemyPiece = state.currentPiece ? RunePiece.from(state.currentPiece) : null;
     this.enemyNext = state.nextPiece ? RunePiece.from(state.nextPiece) : null;
     this.checkGameOver();
+  }
+
+  setOnlineTarget(target, avatar) {
+    if (this.mode !== "online" || !target) return;
+    const changed = target.id !== this.currentOnlineTargetId;
+    if (changed) {
+      this.currentOnlineTargetId = target.id;
+      this.enemyBoard.reset();
+      this.enemy = createFighter(target.name ?? "RIVAL");
+      this.enemyPiece = null;
+      this.enemyNext = null;
+    }
+    if (target.state) this.loadRemoteState(target.state);
+    this.ui.updateOnlineTarget({
+      name: target.name,
+      avatar,
+      aliveCount: target.aliveCount,
+      totalPlayers: target.totalPlayers
+    });
   }
 
   serializeLocal() {
@@ -257,6 +330,7 @@ export class RuneRivalsGame {
       currentPiece: this.playerPiece?.serialize() ?? null,
       nextPiece: this.playerNext?.serialize() ?? null,
       hp: this.player.hp,
+      maxHp: this.player.maxHp,
       shield: this.player.shield,
       junkQueue: this.player.junkQueue,
       updatedAt: Date.now()
@@ -275,6 +349,14 @@ export class RuneRivalsGame {
 
   checkGameOver() {
     if (this.over) return;
+    if (this.mode === "online") {
+      if (this.player.hp <= 0) {
+        this.over = true;
+        this.onNetworkSync?.(this.serializeLocal());
+        this.onLocalEliminated?.();
+      }
+      return;
+    }
     if (this.player.hp <= 0 || this.enemy.hp <= 0) {
       this.over = true;
       const won = this.enemy.hp <= 0 && this.player.hp > 0;

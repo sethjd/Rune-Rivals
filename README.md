@@ -18,6 +18,8 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Adjustable AI pacing and accuracy that ramps through the story
 - Original synthesized piano music and elemental attack sounds
 - Firebase Realtime Database room creation and joining
+- Host-controlled online waiting rooms for 2-6 players
+- Ring-based attacks, elimination retargeting, and final placement results
 - Responsive desktop, portrait-phone, and landscape-phone layouts
 - Keyboard and large touch controls
 - PWA manifest, service worker, offline app shell, and original icons
@@ -144,7 +146,8 @@ assets/
 
 ## Prototype Limitations
 
-- Online state uses a simple host/guest room model and has no authentication or anti-cheat protection.
+- Online rooms support up to six players but still have no authentication or anti-cheat protection.
+- A disconnected player is skipped by the targeting ring; reconnecting to the same seat is not supported yet.
 - Simultaneous online attacks use lightweight event queues rather than a server-authoritative simulation.
 - Online rematches return both players to the menu.
 - Rooms are not automatically deleted from Firebase.

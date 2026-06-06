@@ -22,10 +22,12 @@ let selectedStoryLevel = getStoryLevel(Math.min(profile.unlockedLevel, STORY_LEV
 let lastMode = "ai";
 let lastRoomCode = "";
 let lastStartOptions = {};
-let onlineDisconnected = false;
 
 const game = new RuneRivalsGame(ui, {
   onGameOver: (won) => handleGameOver(won),
+  onLocalEliminated: () => multiplayer.reportElimination().catch((error) => {
+    console.warn("Elimination sync paused:", error);
+  }),
   onNetworkSync: (state) => multiplayer.syncState(state).catch((error) => {
     console.warn("State sync paused:", error);
   }),
@@ -94,6 +96,7 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "create-room") await createRoom(button);
   if (action === "join-room") await joinRoom(button);
+  if (action === "start-online-match") await startOnlineMatch(button);
   if (action === "leave-room") returnToMenu();
 });
 
@@ -109,7 +112,7 @@ function startGame(mode, roomCode = "", options = {}) {
   lastMode = mode;
   lastRoomCode = roomCode;
   lastStartOptions = { ...options };
-  onlineDisconnected = false;
+  document.querySelector('[data-action="rematch"]').classList.remove("hidden");
   hideStoryResultButtons();
   game.start(mode, roomCode, {
     playerName: profile.name,
@@ -259,9 +262,9 @@ async function createRoom(button) {
   if (!multiplayer.configured) return showFirebaseMessage();
   setButtonBusy(button, true);
   try {
-    const code = await multiplayer.createRoom(networkHandlers());
+    const code = await multiplayer.createRoom(profile, onlineHandlers());
     document.querySelector("#room-code-display").textContent = code;
-    document.querySelector("#lobby-message").textContent = "Waiting for a rival to join...";
+    document.querySelector("#lobby-message").textContent = "Waiting for players to join...";
     ui.showScreen("lobby-screen");
   } catch (error) {
     showMenuMessage(error.message);
@@ -279,7 +282,9 @@ async function joinRoom(button) {
   }
   setButtonBusy(button, true);
   try {
-    await multiplayer.joinRoom(code, networkHandlers());
+    await multiplayer.joinRoom(code, profile, onlineHandlers());
+    document.querySelector("#room-code-display").textContent = code;
+    ui.showScreen("lobby-screen");
   } catch (error) {
     document.querySelector("#join-message").textContent = error.message;
   } finally {
@@ -287,21 +292,90 @@ async function joinRoom(button) {
   }
 }
 
-function networkHandlers() {
+async function startOnlineMatch(button) {
+  setButtonBusy(button, true);
+  try {
+    await multiplayer.startMatch();
+  } catch (error) {
+    document.querySelector("#lobby-message").textContent = error.message;
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+function onlineHandlers() {
   return {
-    onReady: (code) => startGame("online", code, {
-      opponentName: "ONLINE RIVAL",
-      opponentAvatar: "./assets/portraits/kael.svg"
-    }),
-    onRemoteState: (state) => game.loadRemoteState(state),
+    onLobby: (room) => {
+      renderOnlineLobby(room);
+    },
+    onStarted: (room) => {
+      if (lastMode !== "online" || !game.running) {
+        startGame("online", room.roomCode, {
+          opponentName: "FINDING TARGET...",
+          opponentAvatar: "./assets/portraits/kael.svg"
+        });
+      }
+    },
+    onTarget: (target) => {
+      game.setOnlineTarget(target, avatarDataUri(target.avatarId));
+    },
     onAttack: (attack) => game.receiveAttack(attack),
-    onDisconnect: () => {
-      if (onlineDisconnected) return;
-      onlineDisconnected = true;
+    onResult: ({ place, totalPlayers, won }) => {
       game.stop();
-      ui.announceResult(false, "Opponent disconnected. The room has been closed.");
+      if (won) audio.playVictory();
+      else audio.playDefeat();
+      hideStoryResultButtons();
+      document.querySelector('[data-action="rematch"]').classList.add("hidden");
+      ui.announcePlacement(place, totalPlayers);
+    },
+    onRoomClosed: () => {
+      if (lastMode === "online" && game.running) game.stop();
+      showMenuMessage("The online room was closed.");
+      ui.showScreen("menu-screen");
     }
   };
+}
+
+function renderOnlineLobby(room) {
+  document.querySelector("#room-code-display").textContent = room.roomCode;
+  const connected = room.players.filter((player) => player.connected !== false);
+  const list = document.querySelector("#lobby-player-list");
+  const cards = [];
+
+  for (let seat = 1; seat <= 6; seat += 1) {
+    const player = connected.find((candidate) => candidate.seat === seat);
+    if (player) {
+      const badges = [
+        player.id === room.playerId ? "YOU" : "",
+        player.id === room.hostId ? "HOST" : ""
+      ].filter(Boolean);
+      cards.push(`
+        <div class="lobby-player-card occupied">
+          <span class="lobby-seat">${seat}</span>
+          <img src="${avatarDataUri(player.avatarId)}" alt="">
+          <strong>${escapeHtml(player.name)}</strong>
+          <small>${[...new Set(badges)].join(" · ") || "READY"}</small>
+        </div>
+      `);
+    } else {
+      cards.push(`
+        <div class="lobby-player-card empty">
+          <span class="lobby-seat">${seat}</span>
+          <div class="empty-avatar">+</div>
+          <strong>Open Seat</strong>
+          <small>Waiting...</small>
+        </div>
+      `);
+    }
+  }
+
+  list.innerHTML = cards.join("");
+  const startButton = document.querySelector("#lobby-start-button");
+  startButton.classList.toggle("hidden", !room.isHost || room.status !== "waiting");
+  startButton.disabled = connected.length < 2;
+  document.querySelector("#lobby-message").textContent = room.status === "waiting"
+    ? `${connected.length}/6 players joined${room.isHost ? ". Start when everyone is ready." : ". Waiting for the host to start."}`
+    : "The match is starting...";
 }
 
 function returnToMenu() {
@@ -309,6 +383,16 @@ function returnToMenu() {
   multiplayer.leave();
   renderMenuProfile();
   ui.showScreen("menu-screen");
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
 }
 
 function updateAudioButtons() {

@@ -37,6 +37,7 @@ export class GameUI {
     this.renderNext(document.querySelector("#player-next"), game.playerNext);
     this.renderNext(document.querySelector("#enemy-next"), game.enemyNext);
     document.querySelector("#battle-status").textContent = game.paused ? "Battle Paused" : "Rune Duel";
+    if (game.mode !== "online") document.querySelector("#target-status").textContent = "";
     this.pauseOverlay.classList.toggle("hidden", !game.paused);
   }
 
@@ -132,10 +133,37 @@ export class GameUI {
     if (options.opponentAvatar) document.querySelector("#enemy-portrait").src = options.opponentAvatar;
   }
 
+  updateOnlineTarget({ name, avatar, aliveCount, totalPlayers }) {
+    document.querySelector("#enemy-name").textContent = name ?? "RIVAL";
+    if (avatar) document.querySelector("#enemy-portrait").src = avatar;
+    document.querySelector("#target-status").textContent =
+      `TARGET: ${name ?? "RIVAL"} · ${aliveCount}/${totalPlayers} REMAIN`;
+  }
+
   announceResult(won, message) {
     document.querySelector("#result-title").textContent = won ? "Victory!" : "Defeat";
     document.querySelector("#result-eyebrow").textContent = won ? "Runes aligned" : "Your ward has fallen";
     document.querySelector("#result-message").textContent = message;
     this.showScreen("result-screen");
   }
+
+  announcePlacement(place, totalPlayers) {
+    const suffix = ordinal(place);
+    const won = place === 1;
+    document.querySelector("#result-title").textContent = won ? "Victory!" : `${suffix} Place`;
+    document.querySelector("#result-eyebrow").textContent = won ? "Last mage standing" : "You were eliminated";
+    document.querySelector("#result-message").textContent = won
+      ? `You defeated the field and placed 1st of ${totalPlayers}.`
+      : `You placed ${suffix} out of ${totalPlayers} players.`;
+    this.showScreen("result-screen");
+  }
+}
+
+function ordinal(number) {
+  const mod100 = number % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
+  if (number % 10 === 1) return `${number}st`;
+  if (number % 10 === 2) return `${number}nd`;
+  if (number % 10 === 3) return `${number}rd`;
+  return `${number}th`;
 }
