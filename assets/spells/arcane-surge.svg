@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="core">
+      <stop stop-color="#fffbd1"/>
+      <stop offset=".25" stop-color="#9be8ff"/>
+      <stop offset=".62" stop-color="#9b5cff"/>
+      <stop offset="1" stop-color="#38145f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="crystal" x1=".2" y1=".1" x2=".8" y2=".9">
+      <stop stop-color="#effcff"/>
+      <stop offset=".28" stop-color="#77cfff"/>
+      <stop offset=".62" stop-color="#9d58f5"/>
+      <stop offset="1" stop-color="#43146f"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="128" cy="128" r="112" fill="url(#core)" opacity=".82"/>
+  <g fill="none" stroke-linecap="round" filter="url(#glow)">
+    <circle cx="128" cy="128" r="84" stroke="#8fdfff" stroke-width="4" stroke-dasharray="10 12"/>
+    <circle cx="128" cy="128" r="61" stroke="#d9a8ff" stroke-width="3" stroke-dasharray="4 9"/>
+    <path d="M128 12v40M128 204v40M12 128h40M204 128h40M46 46l29 29M181 181l29 29M210 46l-29 29M75 181l-29 29" stroke="#d9c0ff" stroke-width="6"/>
+  </g>
+  <path d="m128 44 45 70-45 98-45-98Z" fill="url(#crystal)" stroke="#fff2be" stroke-width="6"/>
+  <path d="m128 44 5 70-5 98-18-98Z" fill="#fff" opacity=".3"/>
+  <path d="m83 114 45 17 45-17M128 131v81" fill="none" stroke="#4e267f" stroke-width="4"/>
+  <circle cx="128" cy="128" r="17" fill="#fff8d5" filter="url(#glow)"/>
+</svg>

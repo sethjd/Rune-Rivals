@@ -1,4 +1,14 @@
 const PROFILE_KEY = "rune-rivals-profile-v1";
+const XP_PER_LEVEL = 180;
+
+const MAGE_RANKS = [
+  { level: 1, name: "Rune Initiate" },
+  { level: 3, name: "Sigil Adept" },
+  { level: 6, name: "Arcane Duelist" },
+  { level: 10, name: "Spellbinder" },
+  { level: 15, name: "Rift Warden" },
+  { level: 22, name: "Grand Magus" }
+];
 
 export const AVATARS = [
   { id: "violet-hood", name: "Violet Hood", skin: "#c98773", hair: "#251335", robe: "#54328b", gem: "#55e2ff", style: "hood" },
@@ -23,7 +33,14 @@ export function loadProfile() {
     name: "Lyra",
     avatarId: AVATARS[0].id,
     unlockedLevel: 1,
-    completedLevels: []
+    completedLevels: [],
+    storyStars: {},
+    xp: 0,
+    wins: 0,
+    onlineWins: 0,
+    battles: 0,
+    bestCombo: 0,
+    totalDamage: 0
   };
 
   try {
@@ -31,7 +48,8 @@ export function loadProfile() {
     return {
       ...fallback,
       ...stored,
-      completedLevels: Array.isArray(stored?.completedLevels) ? stored.completedLevels : []
+      completedLevels: Array.isArray(stored?.completedLevels) ? stored.completedLevels : [],
+      storyStars: stored?.storyStars && typeof stored.storyStars === "object" ? stored.storyStars : {}
     };
   } catch {
     return fallback;
@@ -47,14 +65,64 @@ export function saveProfile(profile) {
   return clean;
 }
 
-export function completeStoryLevel(profile, levelNumber) {
+export function completeStoryLevel(profile, levelNumber, stars = 1) {
   const completed = new Set(profile.completedLevels);
   completed.add(levelNumber);
+  const storyStars = {
+    ...(profile.storyStars ?? {}),
+    [levelNumber]: Math.max(profile.storyStars?.[levelNumber] ?? 0, stars)
+  };
   return saveProfile({
     ...profile,
     completedLevels: [...completed].sort((a, b) => a - b),
+    storyStars,
     unlockedLevel: Math.max(profile.unlockedLevel, Math.min(20, levelNumber + 1))
   });
+}
+
+export function recordBattle(profile, {
+  won = false,
+  mode = "ai",
+  summary = {}
+} = {}) {
+  const xpEarned = Math.max(
+    10,
+    (won ? 70 : 20) +
+      Math.min(50, Number(summary.damageDealt ?? 0)) +
+      Math.max(0, Number(summary.largestCombo ?? 1) - 1) * 15
+  );
+  return saveProfile({
+    ...profile,
+    xp: Math.max(0, Number(profile.xp ?? 0)) + xpEarned,
+    battles: Math.max(0, Number(profile.battles ?? 0)) + 1,
+    wins: Math.max(0, Number(profile.wins ?? 0)) + (won ? 1 : 0),
+    onlineWins: Math.max(0, Number(profile.onlineWins ?? 0)) + (won && mode === "online" ? 1 : 0),
+    bestCombo: Math.max(Number(profile.bestCombo ?? 0), Number(summary.largestCombo ?? 0)),
+    totalDamage: Math.max(0, Number(profile.totalDamage ?? 0)) + Math.max(0, Number(summary.damageDealt ?? 0))
+  });
+}
+
+export function mageLevel(profile) {
+  return Math.max(1, Math.floor(Math.max(0, Number(profile?.xp ?? 0)) / XP_PER_LEVEL) + 1);
+}
+
+export function mageRank(profile) {
+  const level = mageLevel(profile);
+  return [...MAGE_RANKS].reverse().find((rank) => level >= rank.level)?.name ?? MAGE_RANKS[0].name;
+}
+
+export function masteryProgress(profile) {
+  const xp = Math.max(0, Number(profile?.xp ?? 0));
+  return {
+    level: mageLevel(profile),
+    current: xp % XP_PER_LEVEL,
+    required: XP_PER_LEVEL,
+    percent: xp % XP_PER_LEVEL / XP_PER_LEVEL * 100
+  };
+}
+
+export function totalStoryStars(profile) {
+  return Object.values(profile?.storyStars ?? {}).reduce((total, stars) => total + Number(stars || 0), 0);
 }
 
 export function getAvatar(id) {

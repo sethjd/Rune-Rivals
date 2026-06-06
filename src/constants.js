@@ -35,6 +35,14 @@ export const SPELL_VALUES = {
   shadowJunk: 3
 };
 
+export const SURGE_VALUES = {
+  chargeRequired: 100,
+  damage: 20,
+  shield: 8,
+  cleanse: 4,
+  junk: 2
+};
+
 export function comboMultiplier(combo) {
   if (combo >= 3) return 2.7;
   if (combo === 2) return 1.8;

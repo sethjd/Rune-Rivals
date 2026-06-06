@@ -22,7 +22,9 @@ export class InputController {
       ArrowRight: "right",
       ArrowUp: "rotate",
       ArrowDown: "down",
-      " ": "hard-drop"
+      " ": "hard-drop",
+      s: "surge",
+      S: "surge"
     };
 
     if (actions[event.key]) {

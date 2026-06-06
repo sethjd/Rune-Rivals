@@ -1,4 +1,4 @@
-import { comboMultiplier, matchSizeMultiplier, RUNE_DATA, SPELL_VALUES } from "./constants.js";
+import { comboMultiplier, matchSizeMultiplier, RUNE_DATA, SPELL_VALUES, SURGE_VALUES } from "./constants.js";
 
 export function createFighter(name) {
   return {
@@ -6,7 +6,9 @@ export function createFighter(name) {
     hp: 100,
     maxHp: 100,
     shield: 0,
-    junkQueue: 0
+    junkQueue: 0,
+    focus: 0,
+    maxFocus: SURGE_VALUES.chargeRequired
   };
 }
 
@@ -88,6 +90,10 @@ export function applyIncomingAttack(attack, fighter, board) {
   if (attack.kind === "curse") {
     applyDamage(fighter, attack.damage ?? 0);
     fighter.junkQueue += attack.junk;
+  }
+  if (attack.kind === "surge") {
+    applyDamage(fighter, attack.damage ?? SURGE_VALUES.damage);
+    overflowed = board.addJunk(attack.junk ?? SURGE_VALUES.junk);
   }
   return overflowed;
 }

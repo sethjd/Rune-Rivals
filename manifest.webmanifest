@@ -1,13 +1,13 @@
 {
   "name": "Rune Rivals",
   "short_name": "Rune Rivals",
-  "description": "An original falling-rune puzzle battler.",
+  "description": "A premium falling-rune puzzle battler with spell duels, story progression, and online arenas.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#090716",
-  "theme_color": "#17102f",
+  "background_color": "#070912",
+  "theme_color": "#111425",
   "icons": [
     {
       "src": "./assets/icons/app-icon-192.png",

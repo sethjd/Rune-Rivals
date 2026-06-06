@@ -20,6 +20,12 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Firebase Realtime Database room creation and joining
 - Host-controlled online waiting rooms for 2-6 players
 - Ring-based attacks, elimination retargeting, and final placement results
+- Arcane Surge ultimate ability charged by spellcasting
+- Mage XP, levels, ranks, wins, best-combo records, and persistent mastery
+- Three-star story ratings based on health, speed, and combo performance
+- Apprentice, Rival, and Archmage quick-duel tiers
+- A complete in-game Spell Codex and detailed battle summaries
+- Premium painted arena art, danger warnings, damage numbers, and a refined battle HUD
 - Responsive desktop, portrait-phone, and landscape-phone layouts
 - Keyboard and large touch controls
 - PWA manifest, service worker, offline app shell, and original icons

@@ -37,16 +37,76 @@
           <span class="title-rule"></span>
         </div>
         <p class="menu-copy">Stack runes. Cast spells. Duel wizards.</p>
+        <div class="mastery-strip" aria-label="Mage progression">
+          <div>
+            <span class="mastery-label">MAGE LEVEL</span>
+            <strong id="menu-mage-level">1</strong>
+          </div>
+          <div class="mastery-rank">
+            <span class="mastery-label">ARCANE RANK</span>
+            <strong id="menu-mage-rank">Rune Initiate</strong>
+            <div class="mastery-track"><span id="menu-mastery-fill"></span></div>
+          </div>
+          <div>
+            <span class="mastery-label">STORY STARS</span>
+            <strong id="menu-story-stars">0 / 60</strong>
+          </div>
+        </div>
 
         <div class="menu-actions">
           <button class="primary-button" data-action="show-story">Story Mode</button>
-          <button class="primary-button" data-action="play-ai">Play vs AI</button>
+          <button class="primary-button" data-action="show-duel">Quick Duel</button>
           <button data-action="create-room">Create Online Room</button>
           <button data-action="show-join">Join Online Room</button>
+          <button data-action="show-codex">Spell Codex</button>
           <button class="text-button" data-action="show-help">How to Play</button>
         </div>
         <p id="online-status" class="online-status"></p>
         <button id="install-button" class="install-button hidden">Install Rune Rivals</button>
+      </section>
+
+      <section id="duel-screen" class="screen panel-screen" aria-labelledby="duel-title">
+        <div class="panel duel-panel">
+          <p class="eyebrow">Choose your rival</p>
+          <h2 id="duel-title">Quick Duel</h2>
+          <p class="panel-intro">Each rival fights with a different pace and level of foresight.</p>
+          <div class="duel-tier-grid">
+            <button class="duel-tier" data-difficulty="easy">
+              <span class="tier-mark">I</span>
+              <strong>Apprentice</strong>
+              <small>Relaxed pace and forgiving choices</small>
+            </button>
+            <button class="duel-tier selected" data-difficulty="normal">
+              <span class="tier-mark">II</span>
+              <strong>Rival</strong>
+              <small>Balanced speed and tactical play</small>
+            </button>
+            <button class="duel-tier" data-difficulty="hard">
+              <span class="tier-mark">III</span>
+              <strong>Archmage</strong>
+              <small>Fast, accurate, and heavily warded</small>
+            </button>
+          </div>
+          <button data-action="back-menu">Return to Menu</button>
+        </div>
+      </section>
+
+      <section id="codex-screen" class="screen panel-screen" aria-labelledby="codex-title">
+        <div class="panel codex-panel">
+          <p class="eyebrow">The six schools</p>
+          <h2 id="codex-title">Spell Codex</h2>
+          <p class="panel-intro">Build connected groups of three or more. Larger groups and chain reactions multiply every spell.</p>
+          <div class="codex-grid">
+            <article class="codex-card fire"><img src="./assets/runes/fire.svg" alt=""><div><strong>Fireball</strong><span>Heavy direct damage</span></div></article>
+            <article class="codex-card water"><img src="./assets/runes/water.svg" alt=""><div><strong>Cleanse</strong><span>Removes junk and adds pressure</span></div></article>
+            <article class="codex-card earth"><img src="./assets/runes/earth.svg" alt=""><div><strong>Stone Ward</strong><span>Builds a shield and strikes</span></div></article>
+            <article class="codex-card air"><img src="./assets/runes/air.svg" alt=""><div><strong>Gust</strong><span>Clears your highest tiles</span></div></article>
+            <article class="codex-card lightning"><img src="./assets/runes/lightning.svg" alt=""><div><strong>Chain Bolt</strong><span>Damage plus immediate junk</span></div></article>
+            <article class="codex-card shadow"><img src="./assets/runes/shadow.svg" alt=""><div><strong>Curse</strong><span>Damage plus delayed junk</span></div></article>
+            <article class="codex-card arcane"><img src="./assets/spells/arcane-surge.svg" alt=""><div><strong>Arcane Surge</strong><span>Charge through spellcasting, then unleash damage, shield, and cleansing</span></div></article>
+          </div>
+          <button class="primary-button" data-action="back-menu">Close Codex</button>
+        </div>
       </section>
 
       <section id="profile-screen" class="screen panel-screen" aria-labelledby="profile-title">
@@ -89,7 +149,8 @@
             <p id="story-level-label" class="eyebrow">Level 1</p>
             <h3 id="story-opponent-name">The Gatekeeper</h3>
             <p id="story-description">Choose a level on the path.</p>
-            <p id="story-quirk" class="story-quirk"></p>
+          <p id="story-quirk" class="story-quirk"></p>
+          <p id="story-best-stars" class="story-best-stars">Best: Not completed</p>
           </div>
           <button id="story-play-button" class="primary-button" data-action="play-story">Begin Duel</button>
         </div>
@@ -136,7 +197,7 @@
             <div><img src="./assets/runes/lightning.svg" alt=""><b>Lightning</b><span>7 damage + 2 junk</span></div>
             <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>3 delayed junk</span></div>
           </div>
-          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, and P pauses.</p>
+          <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, S casts Arcane Surge, and P pauses.</p>
           <button class="primary-button" data-action="back-menu">Got it</button>
         </div>
       </section>
@@ -154,6 +215,7 @@
             <button class="icon-button" data-action="pause" aria-label="Pause game">II</button>
           </div>
         </header>
+        <div id="danger-alert" class="danger-alert" aria-live="polite">BOARD BREACH RISK</div>
 
         <div class="arena">
           <article class="combatant player-combatant">
@@ -163,6 +225,8 @@
                 <div class="name-row"><strong id="player-name">LYRA</strong><span id="player-shield">&#9671; 0</span></div>
                 <div class="hp-track"><div id="player-hp-bar" class="hp-fill"></div></div>
                 <span id="player-hp-text" class="hp-text">100 HP</span>
+                <div class="focus-heading"><span>ARCANE SURGE</span><b id="surge-text">0%</b></div>
+                <div class="focus-track"><div id="surge-fill" class="focus-fill"></div></div>
               </div>
             </div>
             <div class="board-shell">
@@ -198,6 +262,7 @@
           <div class="effect-trail"></div>
           <img id="battle-effect-image" src="./assets/spells/fireball.svg" alt="">
         </div>
+        <div id="combat-float-layer" class="combat-float-layer" aria-hidden="true"></div>
         <div id="combo-banner" class="combo-banner"></div>
         <div id="pause-overlay" class="game-overlay hidden">
           <div class="panel">
@@ -213,6 +278,7 @@
           <button data-control="rotate" aria-label="Rotate piece">&#8635;</button>
           <button data-control="down" aria-label="Soft drop">&darr;</button>
           <button class="hard-drop" data-control="hard-drop" aria-label="Hard drop">DROP</button>
+          <button id="surge-button" class="surge-button" data-control="surge" aria-label="Cast Arcane Surge" disabled>SURGE</button>
         </nav>
       </section>
 
@@ -221,6 +287,12 @@
           <p id="result-eyebrow" class="eyebrow">Duel complete</p>
           <h2 id="result-title">Victory!</h2>
           <p id="result-message">Your rune craft won the day.</p>
+          <div id="result-stars" class="result-stars hidden" aria-label="Story rating"></div>
+          <div class="battle-summary">
+            <div><span>Damage</span><strong id="result-damage">0</strong></div>
+            <div><span>Best Combo</span><strong id="result-combo">1x</strong></div>
+            <div><span>Time</span><strong id="result-time">0:00</strong></div>
+          </div>
           <button class="primary-button" data-action="rematch">Rematch</button>
           <button id="next-level-button" class="primary-button hidden" data-action="next-story-level">Next Level</button>
           <button id="story-map-button" class="hidden" data-action="show-story">Story Map</button>

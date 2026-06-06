@@ -8,7 +8,12 @@ import {
   avatarDataUri,
   completeStoryLevel,
   loadProfile,
-  saveProfile
+  mageLevel,
+  mageRank,
+  masteryProgress,
+  recordBattle,
+  saveProfile,
+  totalStoryStars
 } from "./profile.js";
 import { getStoryLevel, STORY_LEVELS } from "./story.js";
 import { GameUI } from "./ui.js";
@@ -24,7 +29,7 @@ let lastRoomCode = "";
 let lastStartOptions = {};
 
 const game = new RuneRivalsGame(ui, {
-  onGameOver: (won) => handleGameOver(won),
+  onGameOver: (won, summary) => handleGameOver(won, summary),
   onLocalEliminated: () => multiplayer.reportElimination().catch((error) => {
     console.warn("Elimination sync paused:", error);
   }),
@@ -64,16 +69,20 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const difficultyButton = event.target.closest("[data-difficulty]");
+  if (difficultyButton) {
+    audio.playMove();
+    startQuickDuel(difficultyButton.dataset.difficulty);
+    return;
+  }
+
   const button = event.target.closest("[data-action]");
   if (!button) return;
   await audio.activate();
   const action = button.dataset.action;
 
-  if (action === "play-ai") startGame("ai", "", {
-    opponentName: "KAEL AI",
-    opponentAvatar: "./assets/portraits/kael.svg",
-    aiDifficulty: "easy"
-  });
+  if (action === "show-duel") ui.showScreen("duel-screen");
+  if (action === "show-codex") ui.showScreen("codex-screen");
   if (action === "show-story") showStory();
   if (action === "play-story") startStoryLevel(selectedStoryLevel.number);
   if (action === "next-story-level") startStoryLevel(Math.min(STORY_LEVELS.length, selectedStoryLevel.number + 1));
@@ -133,9 +142,41 @@ function startStoryLevel(levelNumber) {
   });
 }
 
-function handleGameOver(won) {
+function startQuickDuel(difficulty = "normal") {
+  const tiers = {
+    easy: {
+      opponentName: "KAEL, APPRENTICE",
+      aiDifficulty: "easy",
+      rules: { enemyHp: 80, aiSpeed: 5000, aiAccuracy: 0.38 }
+    },
+    normal: {
+      opponentName: "KAEL, RUNE RIVAL",
+      aiDifficulty: "normal",
+      rules: { enemyHp: 100, aiSpeed: 3500, aiAccuracy: 0.7 }
+    },
+    hard: {
+      opponentName: "KAEL, ARCHMAGE",
+      aiDifficulty: "hard",
+      rules: {
+        enemyHp: 120,
+        enemyShield: 16,
+        enemyPower: 1.16,
+        aiSpeed: 2200,
+        aiAccuracy: 0.92
+      }
+    }
+  };
+  const tier = tiers[difficulty] ?? tiers.normal;
+  startGame("ai", "", {
+    ...tier,
+    opponentAvatar: "./assets/portraits/kael.svg"
+  });
+}
+
+function handleGameOver(won, summary = game.getBattleSummary(won)) {
   if (won) audio.playVictory();
   else audio.playDefeat();
+  let stars = 0;
 
   let message = won
     ? "Your rune craft overwhelmed the rival."
@@ -143,7 +184,8 @@ function handleGameOver(won) {
 
   if (lastMode === "story") {
     if (won) {
-      profile = completeStoryLevel(profile, selectedStoryLevel.number);
+      stars = storyRating(summary);
+      profile = completeStoryLevel(profile, selectedStoryLevel.number, stars);
       renderMenuProfile();
       renderStoryMap();
       message = selectedStoryLevel.number === STORY_LEVELS.length
@@ -153,10 +195,15 @@ function handleGameOver(won) {
       message = `${selectedStoryLevel.opponent} holds the path. Adjust your rune craft and try again.`;
     }
     showStoryResultButtons(won);
+    renderResultStars(stars, won);
   } else {
     hideStoryResultButtons();
+    renderResultStars(0, false);
   }
 
+  profile = recordBattle(profile, { won, mode: lastMode, summary });
+  renderMenuProfile();
+  renderBattleSummary(summary);
   ui.announceResult(won, message);
 }
 
@@ -208,6 +255,11 @@ function updateProfilePreview() {
 function renderMenuProfile() {
   document.querySelector("#menu-profile-name").textContent = profile.name;
   document.querySelector("#menu-profile-avatar").src = avatarDataUri(profile.avatarId);
+  document.querySelector("#profile-chip small").textContent = mageRank(profile).toUpperCase();
+  document.querySelector("#menu-mage-level").textContent = mageLevel(profile);
+  document.querySelector("#menu-mage-rank").textContent = mageRank(profile);
+  document.querySelector("#menu-story-stars").textContent = `${totalStoryStars(profile)} / 60`;
+  document.querySelector("#menu-mastery-fill").style.width = `${masteryProgress(profile).percent}%`;
 }
 
 function showStory() {
@@ -224,10 +276,12 @@ function renderStoryMap() {
   container.innerHTML = STORY_LEVELS.map((level) => {
     const locked = level.number > profile.unlockedLevel;
     const complete = profile.completedLevels.includes(level.number);
+    const stars = Number(profile.storyStars?.[level.number] ?? 0);
     return `<button class="story-node ${locked ? "locked" : ""} ${complete ? "complete" : ""}"
       data-level="${level.number}" ${locked ? "disabled" : ""}
       aria-label="Level ${level.number}: ${level.title}${locked ? ", locked" : ""}">
-      <span>${complete ? "★" : level.number}</span>
+      <span>${level.number}</span>
+      <small>${complete ? starMarkup(stars) : ""}</small>
     </button>`;
   }).join("");
 }
@@ -238,6 +292,10 @@ function selectStoryLevel(levelNumber) {
   document.querySelector("#story-opponent-name").textContent = selectedStoryLevel.opponent;
   document.querySelector("#story-description").textContent = selectedStoryLevel.description;
   document.querySelector("#story-quirk").textContent = selectedStoryLevel.quirk;
+  const bestStars = Number(profile.storyStars?.[selectedStoryLevel.number] ?? 0);
+  document.querySelector("#story-best-stars").textContent = bestStars
+    ? `Best rating: ${starText(bestStars)}`
+    : "Best rating: Not completed";
   document.querySelector("#story-opponent-avatar").src = avatarDataUri(selectedStoryLevel.avatarId);
   document.querySelector("#story-play-button").disabled = selectedStoryLevel.number > profile.unlockedLevel;
   for (const node of document.querySelectorAll(".story-node")) {
@@ -256,6 +314,40 @@ function hideStoryResultButtons() {
   document.querySelector("#next-level-button").classList.add("hidden");
   document.querySelector("#story-map-button").classList.add("hidden");
   document.querySelector('[data-action="rematch"]').textContent = "Rematch";
+}
+
+function storyRating(summary) {
+  let stars = 1;
+  if (Number(summary.hpPercent ?? 0) >= 50) stars += 1;
+  if (Number(summary.largestCombo ?? 0) >= 2 || Number(summary.elapsedMs ?? Infinity) <= 90000) stars += 1;
+  return Math.min(3, stars);
+}
+
+function renderResultStars(stars, visible) {
+  const element = document.querySelector("#result-stars");
+  element.classList.toggle("hidden", !visible);
+  element.innerHTML = visible
+    ? Array.from({ length: 3 }, (_, index) => (
+      `<span class="${index < stars ? "earned" : ""}">&#9733;</span>`
+    )).join("")
+    : "";
+}
+
+function renderBattleSummary(summary = {}) {
+  document.querySelector("#result-damage").textContent = Math.round(summary.damageDealt ?? 0);
+  document.querySelector("#result-combo").textContent = `${Math.max(1, summary.largestCombo ?? 1)}x`;
+  const totalSeconds = Math.max(0, Math.round(Number(summary.elapsedMs ?? 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  document.querySelector("#result-time").textContent = `${minutes}:${seconds}`;
+}
+
+function starText(count) {
+  return `${"\u2605".repeat(count)}${"\u2606".repeat(Math.max(0, 3 - count))}`;
+}
+
+function starMarkup(count) {
+  return Array.from({ length: 3 }, (_, index) => index < count ? "&#9733;" : "&#9734;").join("");
 }
 
 async function createRoom(button) {
@@ -321,9 +413,14 @@ function onlineHandlers() {
     },
     onAttack: (attack) => game.receiveAttack(attack),
     onResult: ({ place, totalPlayers, won }) => {
+      const summary = game.getBattleSummary(won);
       game.stop();
       if (won) audio.playVictory();
       else audio.playDefeat();
+      profile = recordBattle(profile, { won, mode: "online", summary });
+      renderMenuProfile();
+      renderBattleSummary(summary);
+      renderResultStars(0, false);
       hideStoryResultButtons();
       document.querySelector('[data-action="rematch"]').classList.add("hidden");
       ui.announcePlacement(place, totalPlayers);

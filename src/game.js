@@ -1,6 +1,6 @@
 import { RuneAI } from "./ai.js";
 import { RuneBoard } from "./board.js";
-import { DROP_SPEED, OVERFLOW_DAMAGE } from "./constants.js";
+import { DROP_SPEED, OVERFLOW_DAMAGE, SURGE_VALUES } from "./constants.js";
 import { RunePiece, randomRunePair } from "./pieces.js";
 import { applyDamage, applyIncomingAttack, castSpell, createFighter } from "./spells.js";
 
@@ -55,6 +55,15 @@ export class RuneRivalsGame {
     this.resolvingSide = "";
     this.resolutionPieceLocked = false;
     this.pendingAttacks = [];
+    this.stats = {
+      startedAt: Date.now(),
+      damageDealt: 0,
+      damageTaken: 0,
+      runesCleared: 0,
+      largestCombo: 0,
+      spellsCast: 0,
+      surgeUses: 0
+    };
     this.running = false;
     this.lastTime = 0;
     this.syncTimer = 0;
@@ -163,6 +172,7 @@ export class RuneRivalsGame {
     if (action === "down" && !this.move(side, 0, 1)) this.lockPiece(side);
     if (action === "rotate") this.rotate(side);
     if (action === "hard-drop") this.hardDrop(side);
+    if (action === "surge") this.castSurge();
   }
 
   move(side, dx, dy) {
@@ -301,6 +311,7 @@ export class RuneRivalsGame {
     const target = this.getFighter(this.otherSide(side));
     const casterBoard = this.getBoard(side);
     const targetBoard = this.getBoard(this.otherSide(side));
+    const targetHpBefore = target.hp;
     const result = castSpell(
       type,
       combo,
@@ -313,12 +324,68 @@ export class RuneRivalsGame {
     );
     this.ui.showSpell(side, result);
     this.onSpell?.(side, result);
+    const damage = Math.max(0, targetHpBefore - target.hp);
+    if (damage) this.ui.showDamage?.(this.otherSide(side), damage, type);
+    if (side === "player") {
+      this.stats.damageDealt += damage;
+      this.stats.runesCleared += matchSize;
+      this.stats.largestCombo = Math.max(this.stats.largestCombo, combo);
+      this.stats.spellsCast += 1;
+      this.chargeFocus(combo, matchSize);
+    } else {
+      this.stats.damageTaken += damage;
+    }
     if (result.overflowed) this.handleOverflow(this.otherSide(side));
 
     if (this.mode === "online" && side === "player" && result.attack) {
       this.onAttack?.(result.attack);
     }
     this.checkGameOver();
+  }
+
+  chargeFocus(combo, matchSize) {
+    const charge = 11 + Math.min(18, matchSize * 3) + Math.max(0, combo - 1) * 12;
+    this.player.focus = Math.min(this.player.maxFocus, this.player.focus + charge);
+  }
+
+  castSurge() {
+    if (
+      this.mode === "debug" ||
+      this.paused ||
+      this.over ||
+      this.resolving ||
+      this.player.focus < this.player.maxFocus
+    ) return false;
+
+    this.player.focus = 0;
+    this.player.shield += SURGE_VALUES.shield;
+    this.playerBoard.removeJunk(SURGE_VALUES.cleanse);
+    const hpBefore = this.enemy.hp;
+    applyDamage(this.enemy, SURGE_VALUES.damage);
+    const damage = Math.max(0, hpBefore - this.enemy.hp);
+    const result = {
+      type: "arcane",
+      label: "ARCANE SURGE!",
+      combo: 3,
+      matchSize: 6
+    };
+    this.stats.damageDealt += damage;
+    this.stats.spellsCast += 1;
+    this.stats.surgeUses += 1;
+    this.ui.showSpell("player", result);
+    this.ui.showDamage?.("enemy", damage, "arcane");
+    this.onSpell?.("player", result);
+
+    if (this.mode === "online") {
+      this.onAttack?.({
+        kind: "surge",
+        type: "arcane",
+        damage: SURGE_VALUES.damage,
+        junk: SURGE_VALUES.junk
+      });
+    }
+    this.checkGameOver();
+    return true;
   }
 
   handleOverflow(side) {
@@ -361,10 +428,21 @@ export class RuneRivalsGame {
   }
 
   applyIncomingAttackNow(attack) {
+    const hpBefore = this.player.hp;
     const overflowed = applyIncomingAttack(attack, this.player, this.playerBoard);
     if (overflowed) this.handleOverflow("player");
+    const damage = Math.max(0, hpBefore - this.player.hp);
+    this.stats.damageTaken += damage;
     const result = {
-      type: attack.type ?? (attack.kind === "curse" ? "shadow" : attack.kind === "lightning" ? "lightning" : "fire"),
+      type: attack.type ?? (
+        attack.kind === "curse"
+          ? "shadow"
+          : attack.kind === "lightning"
+            ? "lightning"
+            : attack.kind === "surge"
+              ? "arcane"
+              : "fire"
+      ),
       label: `${attack.attackerName ?? "RIVAL"}: ${
         attack.type
           ? `${attack.type.toUpperCase()} SURGE!`
@@ -378,6 +456,7 @@ export class RuneRivalsGame {
       matchSize: 3
     };
     this.ui.showSpell("enemy", result);
+    if (damage) this.ui.showDamage?.("player", damage, result.type);
     this.onSpell?.("enemy", result);
     this.checkGameOver();
   }
@@ -389,6 +468,7 @@ export class RuneRivalsGame {
     this.enemy.maxHp = state.maxHp ?? this.enemy.maxHp;
     this.enemy.shield = state.shield ?? this.enemy.shield;
     this.enemy.junkQueue = state.junkQueue ?? this.enemy.junkQueue;
+    this.enemy.focus = state.focus ?? this.enemy.focus;
     this.enemyPiece = state.currentPiece ? RunePiece.from(state.currentPiece) : null;
     this.enemyNext = state.nextPiece ? RunePiece.from(state.nextPiece) : null;
     this.checkGameOver();
@@ -422,6 +502,7 @@ export class RuneRivalsGame {
       maxHp: this.player.maxHp,
       shield: this.player.shield,
       junkQueue: this.player.junkQueue,
+      focus: this.player.focus,
       updatedAt: Date.now()
     };
   }
@@ -450,7 +531,7 @@ export class RuneRivalsGame {
       this.over = true;
       const won = this.enemy.hp <= 0 && this.player.hp > 0;
       this.onNetworkSync?.(this.serializeLocal());
-      window.setTimeout(() => this.onGameOver?.(won), 450);
+      window.setTimeout(() => this.onGameOver?.(won, this.getBattleSummary(won)), 450);
     }
   }
 
@@ -463,6 +544,17 @@ export class RuneRivalsGame {
     this.enemy.shield = rules.enemyShield ?? 0;
     if (rules.playerJunk) this.playerBoard.addJunk(rules.playerJunk);
     if (rules.enemyJunk) this.enemyBoard.addJunk(rules.enemyJunk);
+  }
+
+  getBattleSummary(won = false) {
+    return {
+      ...this.stats,
+      won,
+      elapsedMs: Math.max(0, Date.now() - this.stats.startedAt),
+      hpRemaining: Math.max(0, this.player.hp),
+      maxHp: Math.max(1, this.player.maxHp),
+      hpPercent: Math.max(0, this.player.hp) / Math.max(1, this.player.maxHp) * 100
+    };
   }
 
   spellPowerFor(side, type) {

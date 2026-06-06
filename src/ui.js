@@ -10,6 +10,7 @@ export class GameUI {
     this.comboBanner = document.querySelector("#combo-banner");
     this.battleEffect = document.querySelector("#battle-effect");
     this.battleEffectImage = document.querySelector("#battle-effect-image");
+    this.combatFloatLayer = document.querySelector("#combat-float-layer");
     this.pauseOverlay = document.querySelector("#pause-overlay");
     this.makeBoardCells(this.playerBoard);
     this.makeBoardCells(this.enemyBoard);
@@ -36,6 +37,8 @@ export class GameUI {
     this.renderFighter("enemy", game.enemy);
     this.renderNext(document.querySelector("#player-next"), game.playerNext);
     this.renderNext(document.querySelector("#enemy-next"), game.enemyNext);
+    this.renderSurge(game);
+    this.renderDanger(game);
     document.querySelector("#battle-status").textContent = game.paused
       ? "Battle Paused"
       : game.mode === "online" && game.over
@@ -43,6 +46,22 @@ export class GameUI {
         : "Rune Duel";
     if (game.mode !== "online") document.querySelector("#target-status").textContent = "";
     this.pauseOverlay.classList.toggle("hidden", !game.paused);
+  }
+
+  renderSurge(game) {
+    const focus = Math.max(0, Math.min(game.player.maxFocus, game.player.focus));
+    const percent = focus / Math.max(1, game.player.maxFocus) * 100;
+    document.querySelector("#surge-fill").style.width = `${percent}%`;
+    document.querySelector("#surge-text").textContent = percent >= 100 ? "READY" : `${Math.round(percent)}%`;
+    const button = document.querySelector("#surge-button");
+    button.disabled = percent < 100 || game.resolving || game.over || game.paused;
+    button.classList.toggle("ready", percent >= 100 && !game.over);
+  }
+
+  renderDanger(game) {
+    const danger = game.playerBoard.highestOccupiedRow() <= 3;
+    document.querySelector(".player-combatant .board-shell").classList.toggle("danger", danger);
+    document.querySelector("#danger-alert").classList.toggle("visible", danger && !game.over);
   }
 
   renderBoard(element, board, activePiece, active) {
@@ -103,7 +122,8 @@ export class GameUI {
       earth: "./assets/spells/shield.svg",
       air: "./assets/runes/air.svg",
       lightning: "./assets/spells/lightning.svg",
-      shadow: "./assets/spells/curse.svg"
+      shadow: "./assets/spells/curse.svg",
+      arcane: "./assets/spells/arcane-surge.svg"
     };
     this.battleEffectImage.src = effectAssets[result.type] ?? effectAssets.fire;
     this.battleEffect.className = `battle-effect active effect-${result.type} from-${side}`;
@@ -121,6 +141,15 @@ export class GameUI {
       this.comboBanner.classList.add("visible");
       window.setTimeout(() => this.comboBanner.classList.remove("visible"), 1050);
     }
+  }
+
+  showDamage(side, amount, type = "fire") {
+    if (!this.combatFloatLayer || !amount) return;
+    const element = document.createElement("span");
+    element.className = `combat-number combat-number-${side} combat-number-${type}`;
+    element.textContent = `-${Math.round(amount)}`;
+    this.combatFloatLayer.append(element);
+    window.setTimeout(() => element.remove(), 1050);
   }
 
   setMode(mode, roomCode = "", options = {}) {

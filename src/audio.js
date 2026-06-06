@@ -64,7 +64,8 @@ export class AudioManager {
       earth: [105, 40],
       air: [620, 260],
       lightning: [760, -520],
-      shadow: [150, -70]
+      shadow: [150, -70],
+      arcane: [220, 880]
     };
     const [start, sweep] = sounds[type] ?? sounds.fire;
     const wave = type === "lightning" ? "sawtooth" : type === "water" || type === "air" ? "sine" : "triangle";
