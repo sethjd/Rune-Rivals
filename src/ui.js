@@ -36,7 +36,11 @@ export class GameUI {
     this.renderFighter("enemy", game.enemy);
     this.renderNext(document.querySelector("#player-next"), game.playerNext);
     this.renderNext(document.querySelector("#enemy-next"), game.enemyNext);
-    document.querySelector("#battle-status").textContent = game.paused ? "Battle Paused" : "Rune Duel";
+    document.querySelector("#battle-status").textContent = game.paused
+      ? "Battle Paused"
+      : game.mode === "online" && game.over
+        ? "Confirming Result..."
+        : "Rune Duel";
     if (game.mode !== "online") document.querySelector("#target-status").textContent = "";
     this.pauseOverlay.classList.toggle("hidden", !game.paused);
   }
@@ -60,7 +64,7 @@ export class GameUI {
         const type = display[y][x];
         cellElement.className = "cell";
         cellElement.style.backgroundImage = "";
-        if (type) {
+        if (type && RUNE_DATA[type]) {
           cellElement.classList.add("rune", `rune-${type}`);
           cellElement.style.backgroundImage = `url("${RUNE_DATA[type].icon}")`;
         }

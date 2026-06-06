@@ -5,6 +5,8 @@ import { RunePiece, randomRunePair } from "./pieces.js";
 import { applyDamage, applyIncomingAttack, castSpell, createFighter } from "./spells.js";
 
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const FRAME_STALL_MS = 2500;
+const RESOLUTION_STALL_MS = 20000;
 
 export class RuneRivalsGame {
   constructor(ui, {
@@ -26,6 +28,8 @@ export class RuneRivalsGame {
     this.onDrop = onDrop;
     this.ai = new RuneAI("normal");
     this.loop = this.loop.bind(this);
+    this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
     this.reset();
   }
 
@@ -46,6 +50,10 @@ export class RuneRivalsGame {
     this.paused = false;
     this.over = false;
     this.resolving = false;
+    this.resolutionToken = 0;
+    this.resolutionStartedAt = 0;
+    this.resolvingSide = "";
+    this.resolutionPieceLocked = false;
     this.pendingAttacks = [];
     this.running = false;
     this.lastTime = 0;
@@ -66,35 +74,76 @@ export class RuneRivalsGame {
     this.ui.setMode(mode, roomCode, options);
     this.ui.showScreen("game-screen");
     this.ui.render(this);
-    this.frameId = requestAnimationFrame(this.loop);
+    this.lastFrameAt = performance.now();
+    this.scheduleNextFrame();
+    this.startLoopWatchdog();
   }
 
   stop() {
     this.running = false;
     if (this.frameId) cancelAnimationFrame(this.frameId);
+    this.frameId = null;
+    if (this.watchdogId) window.clearInterval(this.watchdogId);
+    this.watchdogId = null;
   }
 
   loop(time) {
     if (!this.running) return;
-    const delta = Math.min(80, time - (this.lastTime || time));
-    this.lastTime = time;
+    this.frameId = null;
+    this.lastFrameAt = performance.now();
 
-    if (!this.paused && !this.over && !this.resolving) {
-      this.updateFalling("player", delta);
-      if (this.mode === "debug") this.updateFalling("enemy", delta);
-      if (this.mode === "ai" || this.mode === "story") this.ai.update(delta, this);
+    try {
+      const delta = Math.min(80, time - (this.lastTime || time));
+      this.lastTime = time;
 
-      if (this.mode === "online") {
-        this.syncTimer += delta;
-        if (this.syncTimer >= 300) {
-          this.syncTimer = 0;
-          this.onNetworkSync?.(this.serializeLocal());
+      if (!this.paused && !this.over && !this.resolving) {
+        this.updateFalling("player", delta);
+        if (this.mode === "debug") this.updateFalling("enemy", delta);
+        if (this.mode === "ai" || this.mode === "story") this.ai.update(delta, this);
+
+        if (this.mode === "online") {
+          this.syncTimer += delta;
+          if (this.syncTimer >= 300) {
+            this.syncTimer = 0;
+            this.onNetworkSync?.(this.serializeLocal());
+          }
         }
       }
-    }
 
-    this.ui.render(this);
+      this.ui.render(this);
+    } catch (error) {
+      console.error("The game loop recovered from an error.", error);
+    } finally {
+      this.scheduleNextFrame();
+    }
+  }
+
+  scheduleNextFrame() {
+    if (!this.running || this.frameId) return;
     this.frameId = requestAnimationFrame(this.loop);
+  }
+
+  startLoopWatchdog() {
+    if (this.watchdogId) window.clearInterval(this.watchdogId);
+    this.watchdogId = window.setInterval(() => {
+      if (!this.running || document.hidden) return;
+      const now = performance.now();
+      if (this.resolving && Date.now() - this.resolutionStartedAt > RESOLUTION_STALL_MS) {
+        this.recoverStalledResolution();
+      }
+      if (!this.lastFrameAt || now - this.lastFrameAt <= FRAME_STALL_MS) return;
+      if (this.frameId) cancelAnimationFrame(this.frameId);
+      this.frameId = null;
+      this.lastTime = 0;
+      this.scheduleNextFrame();
+    }, 1000);
+  }
+
+  handleVisibilityChange() {
+    if (!this.running || document.hidden) return;
+    this.lastTime = 0;
+    this.lastFrameAt = performance.now();
+    this.scheduleNextFrame();
   }
 
   updateFalling(side, delta) {
@@ -150,7 +199,11 @@ export class RuneRivalsGame {
 
   async lockPiece(side) {
     if (this.resolving || this.over) return;
+    const resolutionToken = ++this.resolutionToken;
     this.resolving = true;
+    this.resolutionStartedAt = Date.now();
+    this.resolvingSide = side;
+    this.resolutionPieceLocked = false;
     let pieceLocked = false;
     try {
       this.onDrop?.(side);
@@ -159,6 +212,7 @@ export class RuneRivalsGame {
       const piece = this.getPiece(side);
       const overflowed = board.lock(piece.cells());
       pieceLocked = true;
+      this.resolutionPieceLocked = true;
 
       if (overflowed) this.handleOverflow(side);
 
@@ -170,33 +224,68 @@ export class RuneRivalsGame {
 
       await board.resolveMatches({
         onHighlight: async (groups, combo) => {
+          this.assertActiveResolution(resolutionToken);
           this.onMatch?.(combo, groups);
           this.ui.render(this);
           await wait(230);
         },
         onClear: async (groups, combo) => {
+          this.assertActiveResolution(resolutionToken);
           for (const group of groups) this.castForSide(side, group.type, combo, group.cells.length);
           this.ui.render(this);
           await wait(150);
         }
       });
 
+      this.assertActiveResolution(resolutionToken);
       this.spawnNext(side);
       pieceLocked = false;
+      this.resolutionPieceLocked = false;
     } catch (error) {
-      console.error("Could not finish resolving the placed runes.", error);
-      if (pieceLocked) {
+      if (resolutionToken === this.resolutionToken) {
+        console.error("Could not finish resolving the placed runes.", error);
+      }
+      if (resolutionToken === this.resolutionToken && pieceLocked) {
         try {
           this.spawnNext(side);
+          this.resolutionPieceLocked = false;
         } catch (spawnError) {
           console.error("Could not prepare the next rune piece.", spawnError);
         }
       }
     } finally {
-      this.resolving = false;
-      this.applyPendingAttacks();
-      this.checkGameOver();
+      if (resolutionToken === this.resolutionToken) {
+        this.finishResolution();
+      }
     }
+  }
+
+  assertActiveResolution(resolutionToken) {
+    if (resolutionToken !== this.resolutionToken) throw new Error("Stale rune resolution stopped.");
+  }
+
+  finishResolution() {
+    this.resolving = false;
+    this.resolutionStartedAt = 0;
+    this.resolvingSide = "";
+    this.resolutionPieceLocked = false;
+    this.applyPendingAttacks();
+    this.checkGameOver();
+  }
+
+  recoverStalledResolution() {
+    const side = this.resolvingSide;
+    const shouldSpawn = this.resolutionPieceLocked;
+    this.resolutionToken += 1;
+    if (side) this.getBoard(side).highlighted.clear();
+    if (side && shouldSpawn) {
+      try {
+        this.spawnNext(side);
+      } catch (error) {
+        console.error("Could not recover the next rune piece.", error);
+      }
+    }
+    this.finishResolution();
   }
 
   placeAIPiece(placement) {

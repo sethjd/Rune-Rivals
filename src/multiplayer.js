@@ -13,6 +13,8 @@ const FIREBASE_VERSION = "10.12.5";
 const APP_URL = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`;
 const DB_URL = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-database.js`;
 const DISCONNECT_GRACE_MS = 15000;
+const ROOM_TRANSACTION_ATTEMPTS = 5;
+const wait = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
 export class MultiplayerClient {
   constructor() {
@@ -355,7 +357,33 @@ export class MultiplayerClient {
 
   async reportElimination() {
     if (!this.db || !this.roomCode || !this.playerId) return;
-    await this.eliminatePlayerById(this.playerId);
+    try {
+      await this.runRoomTransaction((room) => {
+        return eliminatePlayer(room, this.playerId);
+      }, 12);
+    } catch (error) {
+      await this.forceEliminationUpdate(this.playerId);
+    }
+  }
+
+  async forceEliminationUpdate(playerId) {
+    const { ref, get, update } = this.api;
+    const roomRef = ref(this.db, `rooms/${this.roomCode}`);
+    const snapshot = await get(roomRef);
+    const room = snapshot.val();
+    if (!room) throw new Error("The online room was closed.");
+    const updatedRoom = eliminatePlayer(room, playerId);
+    const updates = {};
+
+    for (const player of roomPlayers(updatedRoom)) {
+      updates[`players/${player.id}/alive`] = player.alive !== false;
+      updates[`players/${player.id}/placement`] = player.placement ?? null;
+      updates[`players/${player.id}/eliminatedAt`] = player.eliminatedAt ?? null;
+    }
+    updates.status = updatedRoom.status;
+    updates.winnerId = updatedRoom.winnerId ?? null;
+    updates.finishedAt = updatedRoom.finishedAt ?? null;
+    await update(roomRef, updates);
   }
 
   deliverTarget(room) {
@@ -444,8 +472,7 @@ export class MultiplayerClient {
 
   async eliminateDisconnectedPlayer(playerId) {
     if (!this.db || !this.roomCode) return;
-    const { ref, runTransaction } = this.api;
-    await runTransaction(ref(this.db, `rooms/${this.roomCode}`), (room) => {
+    await this.runRoomTransaction((room) => {
       const player = room?.players?.[playerId];
       if (!disconnectedTooLong(player, Date.now(), DISCONNECT_GRACE_MS)) return room;
       return eliminatePlayer(room, playerId);
@@ -453,8 +480,7 @@ export class MultiplayerClient {
   }
 
   async eliminatePlayerById(playerId) {
-    const { ref, runTransaction } = this.api;
-    await runTransaction(ref(this.db, `rooms/${this.roomCode}`), (room) => {
+    await this.runRoomTransaction((room) => {
       return eliminatePlayer(room, playerId);
     });
   }
@@ -464,9 +490,8 @@ export class MultiplayerClient {
     const remaining = livingPlayers(room);
     if (remaining.length !== 1 || remaining[0].id !== this.playerId) return;
     this.finishingRoom = true;
-    const { ref, runTransaction } = this.api;
     try {
-      await runTransaction(ref(this.db, `rooms/${this.roomCode}`), (current) => {
+      await this.runRoomTransaction((current) => {
         if (!current || current.status !== "playing") return current;
         return finishWhenOneRemains(current);
       });
@@ -483,9 +508,8 @@ export class MultiplayerClient {
     if (!nextHost || nextHost.id !== this.playerId) return;
 
     this.transferringHost = true;
-    const { ref, runTransaction } = this.api;
     try {
-      await runTransaction(ref(this.db, `rooms/${this.roomCode}`), (current) => {
+      await this.runRoomTransaction((current) => {
         if (!current || current.status !== "waiting") return current;
         const currentHost = current.players?.[current.hostId];
         if (currentHost?.connected !== false) return current;
@@ -496,6 +520,35 @@ export class MultiplayerClient {
     } finally {
       this.transferringHost = false;
     }
+  }
+
+  async runRoomTransaction(updateRoom, attempts = ROOM_TRANSACTION_ATTEMPTS) {
+    if (!this.db || !this.roomCode) throw new Error("The online room is no longer available.");
+    const { ref, get, runTransaction } = this.api;
+    const roomRef = ref(this.db, `rooms/${this.roomCode}`);
+    let lastError = null;
+
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const latest = await get(roomRef);
+        if (!latest.exists()) throw new Error("The online room was closed.");
+        let receivedRoom = false;
+        const result = await runTransaction(roomRef, (room) => {
+          if (!room) return;
+          receivedRoom = true;
+          return updateRoom(room);
+        }, { applyLocally: false });
+        if (result.committed) return result.snapshot.val();
+        lastError = new Error(receivedRoom
+          ? "The room changed while the match was updating."
+          : "The latest room state was not ready.");
+      } catch (error) {
+        lastError = error;
+      }
+      await wait(180 * (attempt + 1));
+    }
+
+    throw lastError ?? new Error("The match could not be updated.");
   }
 
   roomView(room) {
@@ -532,12 +585,21 @@ export class MultiplayerClient {
     if (playerRef) {
       this.api.onDisconnect(playerRef).cancel().catch(() => {});
       if (roomStatus === "playing") {
-        this.api.runTransaction(this.api.ref(this.db, `rooms/${roomCode}`), (room) => {
+        const activeRoomCode = this.roomCode;
+        this.runRoomTransaction((room) => {
           if (!room?.players?.[playerId]) return room;
           room.players[playerId].connected = false;
           room.players[playerId].disconnectedAt = Date.now();
           return eliminatePlayer(room, playerId);
-        }).catch(() => {});
+        }).catch(() => {
+          if (this.roomCode === activeRoomCode) {
+            this.api.update(playerRef, {
+              connected: false,
+              disconnectedAt: Date.now(),
+              updatedAt: Date.now()
+            }).catch(() => {});
+          }
+        });
       } else {
         this.releaseSeatClaim().catch(() => {});
         this.api.update(playerRef, {
