@@ -281,25 +281,30 @@ export class MultiplayerClient {
 
   async startMatch() {
     if (!this.db || !this.roomCode || !this.isHost) throw new Error("Only the host can start the match.");
-    const { ref, runTransaction } = this.api;
-    const result = await runTransaction(ref(this.db, `rooms/${this.roomCode}`), (room) => {
-      if (!room || room.status !== "waiting" || room.hostId !== this.playerId) return;
-      const players = roomPlayers(room).filter((player) => player.connected !== false);
-      if (players.length < 2) return;
-      const activeIds = new Set(players.map((player) => player.id));
-      room.status = "playing";
-      room.startedAt = Date.now();
-      room.playerCount = players.length;
-      room.winnerId = null;
-      room.states = null;
-      room.attacks = null;
-      for (const player of roomPlayers(room)) {
-        room.players[player.id].alive = activeIds.has(player.id);
-        room.players[player.id].placement = null;
-      }
-      return room;
-    });
-    if (!result.committed) throw new Error("At least two connected players are needed to start.");
+    const { ref, get, update } = this.api;
+    const roomRef = ref(this.db, `rooms/${this.roomCode}`);
+    const snapshot = await get(roomRef);
+    const room = snapshot.val();
+    if (!room || room.status !== "waiting") throw new Error("That match has already started.");
+    if (room.hostId !== this.playerId) throw new Error("Only the host can start the match.");
+
+    const players = roomPlayers(room).filter((player) => player.connected !== false);
+    if (players.length < 2) throw new Error("At least two connected players are needed to start.");
+
+    const activeIds = new Set(players.map((player) => player.id));
+    const updates = {
+      status: "playing",
+      startedAt: Date.now(),
+      playerCount: players.length,
+      winnerId: null,
+      states: null,
+      attacks: null
+    };
+    for (const player of roomPlayers(room)) {
+      updates[`players/${player.id}/alive`] = activeIds.has(player.id);
+      updates[`players/${player.id}/placement`] = null;
+    }
+    await update(roomRef, updates);
   }
 
   async syncState(state) {
