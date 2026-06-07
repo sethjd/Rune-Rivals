@@ -4196,6 +4196,13 @@ button.piece-preview:active {
   line-height: 1.45;
 }
 
+.story-level-meta .story-music-detail {
+  margin: 1px 0 7px;
+  color: color-mix(in srgb, var(--chapter-accent) 72%, #9e927f);
+  font-size: 0.54rem;
+  line-height: 1.4;
+}
+
 .story-level-meta #story-play-button {
   align-self: end;
   min-width: 0;
@@ -4336,6 +4343,11 @@ button.piece-preview:active {
   .story-level-meta .story-chapter-lore {
     grid-column: 1 / -1;
     margin: 2px 0 4px;
+  }
+
+  .story-level-meta .story-music-detail {
+    grid-column: 1 / -1;
+    margin: 0 0 4px;
   }
 
   .story-level-meta #story-play-button {

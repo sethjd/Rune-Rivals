@@ -1,4 +1,4 @@
-const CACHE_NAME = "rune-rivals-v16";
+const CACHE_NAME = "rune-rivals-v17";
 const APP_SHELL = [
   "./",
   "./index.html",

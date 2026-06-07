@@ -16,7 +16,9 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Saved player profiles with custom names and 15 original avatars
 - A five-chapter, 20-level story campaign with rival dialogue, relics, lore, and battle quirks
 - Adjustable AI pacing and accuracy that ramps through the story
-- Original synthesized piano music and elemental attack sounds
+- Original adaptive soundtrack with distinct map and battle arrangements for all five story chapters
+- Layered synthesized pads, bass, melody, arpeggios, percussion, reverb, and elemental attack sounds
+- A dedicated audio cue when Arcane Surge becomes ready
 - Firebase Realtime Database room creation and joining
 - Public lobby browser with one-tap joining and automatic stale-room filtering
 - Optional hidden rooms for friend-code games
@@ -153,7 +155,7 @@ assets/
 - Public lobby summaries disappear from Open Arenas when their host stops updating them, but old room records still require periodic database cleanup.
 - AI plans one piece at a time and does not search future pieces.
 - Profiles and story progress are saved locally on each browser/device.
-- Sound, settings, accessibility options, and a guided tutorial are not included yet.
+- Separate music/effects volume controls, accessibility audio settings, and a guided tutorial are not included yet.
 - The service worker uses a cache-first app shell. During development, refresh after changing its cache version.
 
 ## Good Next Steps
@@ -162,7 +164,7 @@ assets/
 2. Add room expiry and reconnection support.
 3. Add animated story dialogue scenes and mechanical relic rewards.
 4. Add a short interactive tutorial and colour-blind rune patterns.
-5. Add original sound effects, haptics settings, and richer spell animation.
+5. Add separate music/effects sliders, haptics settings, and richer spell animation.
 6. Add online rematches, player display names, and match statistics.
 7. Add automated gameplay and mobile-layout tests.
 

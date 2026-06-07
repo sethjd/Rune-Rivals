@@ -17,7 +17,8 @@ export class RuneRivalsGame {
     onSpell,
     onMatch,
     onDrop,
-    onHold
+    onHold,
+    onSurgeReady
   } = {}) {
     this.ui = ui;
     this.onGameOver = onGameOver;
@@ -28,6 +29,7 @@ export class RuneRivalsGame {
     this.onMatch = onMatch;
     this.onDrop = onDrop;
     this.onHold = onHold;
+    this.onSurgeReady = onSurgeReady;
     this.ai = new RuneAI("normal");
     this.loop = this.loop.bind(this);
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -380,8 +382,10 @@ export class RuneRivalsGame {
   }
 
   chargeFocus(combo, matchSize) {
+    const wasReady = this.player.focus >= this.player.maxFocus;
     const charge = 11 + Math.min(18, matchSize * 3) + Math.max(0, combo - 1) * 12;
     this.player.focus = Math.min(this.player.maxFocus, this.player.focus + charge);
+    if (!wasReady && this.player.focus >= this.player.maxFocus) this.onSurgeReady?.();
   }
 
   castSurge() {

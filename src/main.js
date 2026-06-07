@@ -1,4 +1,4 @@
-import { AudioManager } from "./audio.js";
+import { AudioManager, chapterMusicDetails } from "./audio.js";
 import {
   CODEX_GLOSSARY,
   getCodexSpell,
@@ -61,7 +61,8 @@ const game = new RuneRivalsGame(ui, {
   onSpell: (_side, result) => audio.playSpell(result.type),
   onMatch: (combo) => audio.playMatch(combo),
   onDrop: () => audio.playDrop(),
-  onHold: () => audio.playHold()
+  onHold: () => audio.playHold(),
+  onSurgeReady: () => audio.playSurgeReady()
 });
 
 new InputController(
@@ -70,7 +71,7 @@ new InputController(
     if (action === "left" || action === "right" || action === "rotate" || action === "down") audio.playMove();
     game.handleAction(action);
   },
-  () => game.togglePause(),
+  () => toggleGamePause(),
   () => game.swapDebugSide()
 );
 
@@ -109,7 +110,10 @@ document.addEventListener("click", async (event) => {
   await audio.activate();
   const action = button.dataset.action;
 
-  if (action === "show-duel") ui.showScreen("duel-screen");
+  if (action === "show-duel") {
+    audio.setMusicScene("duel");
+    ui.showScreen("duel-screen");
+  }
   if (action === "show-leaderboard") showLeaderboard();
   if (action === "refresh-leaderboard") loadLeaderboard(button);
   if (action === "show-codex") showCodex();
@@ -122,16 +126,20 @@ document.addEventListener("click", async (event) => {
     audio.toggle();
     updateAudioButtons();
   }
-  if (action === "show-help") ui.showScreen("help-screen");
+  if (action === "show-help") {
+    audio.setMusicScene("menu");
+    ui.showScreen("help-screen");
+  }
   if (action === "show-lobbies") showPublicLobbies();
   if (action === "refresh-lobbies") await loadPublicLobbies(button);
   if (action === "show-join") {
     stopPublicLobbyRefresh();
     document.querySelector("#join-message").textContent = "";
+    audio.setMusicScene("online");
     ui.showScreen("join-screen");
   }
   if (action === "back-menu" || action === "confirm-exit") returnToMenu();
-  if (action === "pause") game.togglePause();
+  if (action === "pause") toggleGamePause();
   if (action === "rematch") {
     if (lastMode === "online") returnToMenu();
     else startGame(lastMode, lastRoomCode, lastStartOptions);
@@ -158,6 +166,11 @@ function startGame(mode, roomCode = "", options = {}) {
   lastStartOptions = { ...options };
   document.querySelector('[data-action="rematch"]').classList.remove("hidden");
   hideStoryResultButtons();
+  audio.setPaused(false);
+  audio.setMusicScene(
+    mode === "story" ? "story-battle" : mode === "online" ? "online-battle" : "duel",
+    options.storyLevel?.chapter
+  );
   game.start(mode, roomCode, {
     playerName: profile.name,
     playerAvatar: avatarDataUri(profile.avatarId),
@@ -209,6 +222,10 @@ function startQuickDuel(difficulty = "normal") {
 }
 
 function handleGameOver(won, summary = game.getBattleSummary(won)) {
+  audio.setMusicScene(
+    lastMode === "story" ? "story-result" : "result",
+    selectedStoryLevel.chapter
+  );
   if (won) audio.playVictory();
   else audio.playDefeat();
   let stars = 0;
@@ -245,6 +262,7 @@ function handleGameOver(won, summary = game.getBattleSummary(won)) {
 }
 
 function showProfile() {
+  audio.setMusicScene("menu");
   selectedAvatarId = profile.avatarId;
   document.querySelector("#profile-name-input").value = profile.name;
   document.querySelector("#profile-message").textContent = "";
@@ -271,6 +289,7 @@ function saveProfileFromForm() {
   }
   profile = saveProfile({ ...profile, name, avatarId: selectedAvatarId });
   renderMenuProfile();
+  audio.setMusicScene("menu");
   ui.showScreen("menu-screen");
 }
 
@@ -306,6 +325,7 @@ function showStory() {
   renderStoryMap();
   selectStoryLevel(selectedStoryLevel.number);
   ui.showScreen("story-screen");
+  audio.setMusicScene("story-map", selectedStoryLevel.chapter);
 }
 
 function renderStoryMap() {
@@ -356,6 +376,9 @@ function selectStoryLevel(levelNumber) {
   document.querySelector("#story-quirk").textContent = selectedStoryLevel.quirk;
   document.querySelector("#story-chapter-name").textContent = chapter.title;
   document.querySelector("#story-chapter-lore").textContent = chapter.lore;
+  const music = chapterMusicDetails(chapter.number);
+  document.querySelector("#story-music-title").textContent = music.title;
+  document.querySelector("#story-music-detail").textContent = music.description;
   document.querySelector("#story-reward").textContent = selectedStoryLevel.reward;
   const bestStars = Number(profile.storyStars?.[selectedStoryLevel.number] ?? 0);
   document.querySelector("#story-objectives").innerHTML = storyObjectiveLabels(selectedStoryLevel).map((objective, index) => (
@@ -377,9 +400,13 @@ function selectStoryLevel(levelNumber) {
       chapterElement.classList.contains(`chapter-${chapter.number}`)
     );
   }
+  if (document.querySelector("#story-screen").classList.contains("active")) {
+    audio.setMusicScene("story-map", chapter.number);
+  }
 }
 
 function showCodex() {
+  audio.setMusicScene("menu");
   renderCodex();
   ui.showScreen("codex-screen");
 }
@@ -387,6 +414,7 @@ function showCodex() {
 function showLeaderboard() {
   game.stop();
   multiplayer.leave();
+  audio.setMusicScene("menu");
   renderPersonalLeague({
     name: profile.name,
     avatarId: profile.avatarId,
@@ -623,6 +651,7 @@ function showPublicLobbies() {
   document.querySelector("#public-lobby-message").textContent = multiplayer.configured
     ? "Searching for open arenas..."
     : "Online lobbies need Firebase to be configured.";
+  audio.setMusicScene("online");
   ui.showScreen("public-lobbies-screen");
   if (multiplayer.configured) {
     loadPublicLobbies();
@@ -686,6 +715,7 @@ async function createRoom(button, visibility = "public") {
       ? "Your arena is public. Waiting for rune mages to join..."
       : "Private room ready. Share the invite code with friends.";
     stopPublicLobbyRefresh();
+    audio.setMusicScene("online");
     ui.showScreen("lobby-screen");
   } catch (error) {
     const message = visibility === "public"
@@ -725,6 +755,7 @@ async function joinRoomByCode(code, button, messageElement) {
     await multiplayer.joinRoom(normalizedCode, profile, onlineHandlers());
     document.querySelector("#room-code-display").textContent = normalizedCode;
     stopPublicLobbyRefresh();
+    audio.setMusicScene("online");
     ui.showScreen("lobby-screen");
     return true;
   } catch (error) {
@@ -768,6 +799,7 @@ function onlineHandlers() {
       const medals = battleMedals(summary, won);
       const completedSummary = { ...summary, medalCount: medals.length };
       game.stop();
+      audio.setMusicScene("result");
       if (won) audio.playVictory();
       else audio.playDefeat();
       profile = recordBattle(profile, { won, mode: "online", summary: completedSummary });
@@ -802,6 +834,7 @@ function onlineHandlers() {
           "That arena closed. The open-game list has been refreshed.";
       } else {
         showMenuMessage("The online room was closed.");
+        audio.setMusicScene("menu");
         ui.showScreen("menu-screen");
       }
     }
@@ -864,6 +897,7 @@ function leaveOnlineRoom() {
   if (wasPublic) showPublicLobbies();
   else {
     renderMenuProfile();
+    audio.setMusicScene("menu");
     ui.showScreen("menu-screen");
   }
 }
@@ -874,7 +908,14 @@ function returnToMenu() {
   game.stop();
   multiplayer.leave();
   renderMenuProfile();
+  audio.setPaused(false);
+  audio.setMusicScene("menu");
   ui.showScreen("menu-screen");
+}
+
+function toggleGamePause() {
+  game.togglePause();
+  audio.setPaused(game.paused);
 }
 
 function escapeHtml(value) {
@@ -897,6 +938,7 @@ function updateAudioButtons() {
 
 function showFirebaseMessage() {
   showMenuMessage("Online mode needs your Firebase config. See README.md for the free setup steps.");
+  audio.setMusicScene("menu");
   ui.showScreen("menu-screen");
 }
 
