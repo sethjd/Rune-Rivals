@@ -102,22 +102,45 @@ export class RuneBoard {
     return overflowed;
   }
 
-  async resolveMatches({ onHighlight, onClear } = {}) {
+  async resolveMatches({ onHighlight, onClear, shouldContinue } = {}) {
     let combo = 0;
     let groups = findMatches(this.grid);
 
     while (groups.length) {
+      if (shouldContinue && !shouldContinue()) break;
       combo += 1;
       this.highlighted = matchedCellKeys(groups);
-      await onHighlight?.(groups, combo);
-      this.removeCells(groups);
-      this.highlighted.clear();
-      this.applyGravity();
-      await onClear?.(groups, combo);
+      try {
+        await onHighlight?.(groups, combo);
+        if (shouldContinue && !shouldContinue()) break;
+        this.removeCells(groups);
+        this.applyGravity();
+        await onClear?.(groups, combo);
+        if (shouldContinue && !shouldContinue()) break;
+      } finally {
+        this.highlighted.clear();
+      }
       groups = findMatches(this.grid);
     }
 
     return combo;
+  }
+
+  resolveMatchesImmediately(startCombo = 0) {
+    let combo = Math.max(0, Number(startCombo) || 0);
+    let groups = findMatches(this.grid);
+    const clears = [];
+    this.highlighted.clear();
+
+    while (groups.length) {
+      combo += 1;
+      this.removeCells(groups);
+      this.applyGravity();
+      clears.push({ groups, combo });
+      groups = findMatches(this.grid);
+    }
+
+    return clears;
   }
 
   highestOccupiedRow() {
@@ -140,6 +163,7 @@ export class RuneBoard {
   load(grid) {
     if (!Array.isArray(grid) || grid.length !== BOARD_HEIGHT) return;
     this.grid = grid.map((row) => Array.from({ length: BOARD_WIDTH }, (_, x) => row?.[x] ?? null));
+    this.highlighted.clear();
   }
 }
 

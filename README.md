@@ -11,6 +11,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Orthogonal match-3 groups, gravity, and chain combos
 - Fireball, Cleanse, Stone Shield, Gust, Chain Bolt, and Curse spells
 - Faster battles with offensive pressure on every spell, stronger large groups, and steep combo scaling
+- Match-resolution recovery that clears interrupted flashing runes and resumes online play
 - HP, shields, board-overflow penalties, victory, defeat, pause, and rematch
 - AI that scores possible placements and prefers immediate matches
 - Saved player profiles with custom names and 15 original avatars

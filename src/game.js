@@ -6,7 +6,7 @@ import { applyDamage, applyIncomingAttack, castSpell, createFighter } from "./sp
 
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const FRAME_STALL_MS = 2500;
-const RESOLUTION_STALL_MS = 20000;
+const RESOLUTION_STALL_MS = 5000;
 
 export class RuneRivalsGame {
   constructor(ui, {
@@ -59,8 +59,11 @@ export class RuneRivalsGame {
     this.resolving = false;
     this.resolutionToken = 0;
     this.resolutionStartedAt = 0;
+    this.resolutionProgressAt = 0;
     this.resolvingSide = "";
     this.resolutionPieceLocked = false;
+    this.resolutionPhase = "";
+    this.resolutionCombo = 0;
     this.pendingAttacks = [];
     this.stats = {
       startedAt: Date.now(),
@@ -144,7 +147,7 @@ export class RuneRivalsGame {
     this.watchdogId = window.setInterval(() => {
       if (!this.running || document.hidden) return;
       const now = performance.now();
-      if (this.resolving && Date.now() - this.resolutionStartedAt > RESOLUTION_STALL_MS) {
+      if (this.resolving && Date.now() - this.resolutionProgressAt > RESOLUTION_STALL_MS) {
         this.recoverStalledResolution();
       }
       if (!this.lastFrameAt || now - this.lastFrameAt <= FRAME_STALL_MS) return;
@@ -157,6 +160,9 @@ export class RuneRivalsGame {
 
   handleVisibilityChange() {
     if (!this.running || document.hidden) return;
+    if (this.resolving && Date.now() - this.resolutionProgressAt > RESOLUTION_STALL_MS) {
+      this.recoverStalledResolution();
+    }
     this.lastTime = 0;
     this.lastFrameAt = performance.now();
     this.scheduleNextFrame();
@@ -250,11 +256,14 @@ export class RuneRivalsGame {
     const resolutionToken = ++this.resolutionToken;
     this.resolving = true;
     this.resolutionStartedAt = Date.now();
+    this.resolutionProgressAt = this.resolutionStartedAt;
     this.resolvingSide = side;
     this.resolutionPieceLocked = false;
+    this.resolutionPhase = "locking";
+    this.resolutionCombo = 0;
     let pieceLocked = false;
     try {
-      this.onDrop?.(side);
+      this.notifySafely(this.onDrop, "drop sound", side);
       const board = this.getBoard(side);
       const fighter = this.getFighter(side);
       const piece = this.getPiece(side);
@@ -271,17 +280,25 @@ export class RuneRivalsGame {
       }
 
       await board.resolveMatches({
+        shouldContinue: () => resolutionToken === this.resolutionToken,
         onHighlight: async (groups, combo) => {
           this.assertActiveResolution(resolutionToken);
-          this.onMatch?.(combo, groups);
+          this.resolutionPhase = "highlight";
+          this.resolutionCombo = combo;
+          this.resolutionProgressAt = Date.now();
+          this.notifySafely(this.onMatch, "match sound", combo, groups);
           this.ui.render(this);
           await wait(230);
         },
         onClear: async (groups, combo) => {
           this.assertActiveResolution(resolutionToken);
+          this.resolutionPhase = "clear";
+          this.resolutionCombo = combo;
+          this.resolutionProgressAt = Date.now();
           for (const group of groups) this.castForSide(side, group.type, combo, group.cells.length);
           this.ui.render(this);
           await wait(150);
+          this.resolutionProgressAt = Date.now();
         }
       });
 
@@ -295,6 +312,7 @@ export class RuneRivalsGame {
       }
       if (resolutionToken === this.resolutionToken && pieceLocked) {
         try {
+          this.resolveRemainingMatches(side);
           this.spawnNext(side);
           this.resolutionPieceLocked = false;
         } catch (spawnError) {
@@ -313,27 +331,63 @@ export class RuneRivalsGame {
   }
 
   finishResolution() {
+    this.playerBoard.highlighted.clear();
+    this.enemyBoard.highlighted.clear();
     this.resolving = false;
     this.resolutionStartedAt = 0;
+    this.resolutionProgressAt = 0;
     this.resolvingSide = "";
     this.resolutionPieceLocked = false;
+    this.resolutionPhase = "";
+    this.resolutionCombo = 0;
     this.applyPendingAttacks();
     this.checkGameOver();
+    if (this.running) {
+      try {
+        this.ui.render(this);
+      } catch (error) {
+        console.error("Could not refresh the board after rune resolution.", error);
+      }
+    }
+    if (this.mode === "online" && !this.over) {
+      this.notifySafely(this.onNetworkSync, "online state sync", this.serializeLocal());
+    }
   }
 
   recoverStalledResolution() {
     const side = this.resolvingSide;
     const shouldSpawn = this.resolutionPieceLocked;
     this.resolutionToken += 1;
-    if (side) this.getBoard(side).highlighted.clear();
     if (side && shouldSpawn) {
       try {
+        this.resolveRemainingMatches(side);
         this.spawnNext(side);
       } catch (error) {
         console.error("Could not recover the next rune piece.", error);
       }
     }
     this.finishResolution();
+  }
+
+  resolveRemainingMatches(side) {
+    const board = this.getBoard(side);
+    const startCombo = this.resolutionPhase === "highlight"
+      ? Math.max(0, this.resolutionCombo - 1)
+      : this.resolutionCombo;
+    const clears = board.resolveMatchesImmediately(startCombo);
+    for (const { groups, combo } of clears) {
+      for (const group of groups) this.castForSide(side, group.type, combo, group.cells.length);
+    }
+  }
+
+  notifySafely(handler, label, ...args) {
+    if (typeof handler !== "function") return;
+    try {
+      const pending = handler(...args);
+      pending?.catch?.((error) => console.warn(`Could not finish ${label}.`, error));
+    } catch (error) {
+      console.warn(`Could not finish ${label}.`, error);
+    }
   }
 
   placeAIPiece(placement) {
@@ -361,7 +415,7 @@ export class RuneRivalsGame {
       this.spellPowerFor(side, type)
     );
     this.ui.showSpell(side, result);
-    this.onSpell?.(side, result);
+    this.notifySafely(this.onSpell, "spell sound", side, result);
     const damage = Math.max(0, targetHpBefore - target.hp);
     if (damage) this.ui.showDamage?.(this.otherSide(side), damage, type);
     if (side === "player") {
@@ -376,7 +430,7 @@ export class RuneRivalsGame {
     if (result.overflowed) this.handleOverflow(this.otherSide(side));
 
     if (this.mode === "online" && side === "player" && result.attack) {
-      this.onAttack?.(result.attack);
+      this.notifySafely(this.onAttack, "online attack", result.attack);
     }
     this.checkGameOver();
   }
@@ -385,7 +439,9 @@ export class RuneRivalsGame {
     const wasReady = this.player.focus >= this.player.maxFocus;
     const charge = 11 + Math.min(18, matchSize * 3) + Math.max(0, combo - 1) * 12;
     this.player.focus = Math.min(this.player.maxFocus, this.player.focus + charge);
-    if (!wasReady && this.player.focus >= this.player.maxFocus) this.onSurgeReady?.();
+    if (!wasReady && this.player.focus >= this.player.maxFocus) {
+      this.notifySafely(this.onSurgeReady, "surge-ready sound");
+    }
   }
 
   castSurge() {
@@ -418,10 +474,10 @@ export class RuneRivalsGame {
     this.stats.surgeUses += 1;
     this.ui.showSpell("player", result);
     this.ui.showDamage?.("enemy", damage, "arcane");
-    this.onSpell?.("player", result);
+    this.notifySafely(this.onSpell, "spell sound", "player", result);
 
     if (this.mode === "online") {
-      this.onAttack?.({
+      this.notifySafely(this.onAttack, "online attack", {
         kind: "surge",
         type: "arcane",
         damage: SURGE_VALUES.damage,
@@ -502,7 +558,7 @@ export class RuneRivalsGame {
     };
     this.ui.showSpell("enemy", result);
     if (damage) this.ui.showDamage?.("player", damage, result.type);
-    this.onSpell?.("enemy", result);
+    this.notifySafely(this.onSpell, "spell sound", "enemy", result);
     this.checkGameOver();
   }
 
@@ -569,15 +625,15 @@ export class RuneRivalsGame {
     if (this.mode === "online") {
       if (this.player.hp <= 0) {
         this.over = true;
-        this.onNetworkSync?.(this.serializeLocal());
-        this.onLocalEliminated?.();
+        this.notifySafely(this.onNetworkSync, "final online state sync", this.serializeLocal());
+        this.notifySafely(this.onLocalEliminated, "online elimination");
       }
       return;
     }
     if (this.player.hp <= 0 || this.enemy.hp <= 0) {
       this.over = true;
       const won = this.enemy.hp <= 0 && this.player.hp > 0;
-      this.onNetworkSync?.(this.serializeLocal());
+      this.notifySafely(this.onNetworkSync, "final state sync", this.serializeLocal());
       window.setTimeout(() => this.onGameOver?.(won, this.getBattleSummary(won)), 450);
     }
   }
