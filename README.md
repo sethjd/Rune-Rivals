@@ -18,6 +18,8 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Adjustable AI pacing and accuracy that ramps through the story
 - Original synthesized piano music and elemental attack sounds
 - Firebase Realtime Database room creation and joining
+- Public lobby browser with one-tap joining and automatic stale-room filtering
+- Optional hidden rooms for friend-code games
 - Host-controlled online waiting rooms for 2-6 players
 - Ring-based attacks, elimination retargeting, and final placement results
 - Anonymous Firebase accounts for persistent online identity
@@ -62,7 +64,7 @@ Other static servers work too, including the VS Code Live Server extension.
 
 ## Enable Firebase Multiplayer
 
-Online mode stays disabled with a friendly message until a real Firebase config is added. Offline play does not require Firebase.
+Online mode stays disabled with a friendly message until a real Firebase config is added. Offline play does not require Firebase. Public games appear in **Open Arenas**; private rooms remain available through friend codes.
 
 1. Create a free project at [Firebase](https://console.firebase.google.com/).
 2. In the project overview, add a **Web app**.
@@ -77,7 +79,7 @@ The config object is a public web-client identifier, not an admin secret. Never 
 
 ### Database Rules
 
-Paste the included `firebase-rules.json` into **Realtime Database → Rules**, then publish it. The rules require an authenticated anonymous account for online rooms, allow public leaderboard reads, and only let a player update their own ranking with a newer recorded placement that contains the same Firebase account.
+Paste the included `firebase-rules.json` into **Realtime Database → Rules**, then publish it. The rules require an authenticated anonymous account for online rooms and lobby discovery, allow public leaderboard reads, and only let a player update their own ranking with a newer recorded placement that contains the same Firebase account.
 
 This is stronger than the original open-room prototype, but the simulation still runs in browsers. A commercial competitive version should calculate rankings in a trusted Cloud Function or game server, rate-limit room creation, and automatically remove expired rooms.
 
@@ -148,6 +150,7 @@ assets/
 - Simultaneous online attacks use lightweight event queues rather than a server-authoritative simulation.
 - Online rematches return both players to the menu.
 - Rooms are not automatically deleted from Firebase.
+- Public lobby summaries disappear from Open Arenas when their host stops updating them, but old room records still require periodic database cleanup.
 - AI plans one piece at a time and does not search future pieces.
 - Profiles and story progress are saved locally on each browser/device.
 - Sound, settings, accessibility options, and a guided tutorial are not included yet.

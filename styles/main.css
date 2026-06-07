@@ -195,6 +195,16 @@ h2 {
   font-size: 0.8rem;
 }
 
+.online-play-button {
+  border-color: #6ed9f0;
+  color: #08131b;
+  background:
+    linear-gradient(180deg, #a8f0ff, #4ebbd6);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.5),
+    0 0 22px rgba(73, 195, 225, 0.2);
+}
+
 .install-button {
   min-height: 38px;
   padding: 8px 18px;
@@ -294,6 +304,159 @@ input:focus {
 
 .online-lobby-panel .room-code {
   font-size: clamp(2rem, 7vw, 3.5rem);
+}
+
+.public-lobbies-panel {
+  width: min(100%, 920px);
+  max-height: calc(100dvh - 24px);
+  padding: 0 0 22px;
+  overflow: hidden auto;
+  text-align: left;
+}
+
+.public-lobbies-hero {
+  min-height: 220px;
+  padding: clamp(28px, 5vw, 48px);
+  border-bottom: 2px solid #9f743b;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 14, 0.96), rgba(5, 7, 14, 0.4) 62%, rgba(5, 7, 14, 0.78)),
+    linear-gradient(0deg, rgba(5, 7, 14, 0.92), transparent 65%),
+    url("../assets/backgrounds/arcane-cathedral.webp") center 43% / cover;
+}
+
+.public-lobbies-hero h2 {
+  margin: 3px 0 8px;
+  color: #f3d58c;
+  font-family: Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  text-transform: uppercase;
+}
+
+.public-lobbies-hero p:last-child {
+  max-width: 500px;
+  margin: 0;
+  color: #d1c0a4;
+  line-height: 1.5;
+}
+
+.public-lobby-actions {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(150px, 0.55fr);
+  padding: 16px 18px 8px;
+  gap: 9px;
+}
+
+.public-lobby-list {
+  display: grid;
+  padding: 8px 18px;
+  gap: 9px;
+}
+
+.public-lobby-card {
+  display: grid;
+  grid-template-columns: 62px minmax(150px, 1fr) 105px 145px;
+  align-items: center;
+  min-height: 82px;
+  padding: 10px 12px;
+  border: 2px solid #5c4c38;
+  gap: 12px;
+  background:
+    radial-gradient(circle at 8% 50%, rgba(89, 64, 143, 0.25), transparent 22%),
+    linear-gradient(135deg, rgba(33, 34, 46, 0.98), rgba(7, 8, 13, 0.98));
+  box-shadow: inset 3px 0 #7653a9, 0 6px 18px rgba(0, 0, 0, 0.24);
+}
+
+.public-lobby-card > img {
+  width: 58px;
+  border: 3px ridge #a87a3c;
+  border-radius: 50%;
+  background: #0b0a13;
+}
+
+.public-lobby-host {
+  display: grid;
+  min-width: 0;
+}
+
+.public-lobby-host span,
+.public-lobby-seats span {
+  color: #847867;
+  font-size: 0.48rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.public-lobby-host strong {
+  overflow: hidden;
+  color: #f0d39a;
+  font-family: Georgia, serif;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.public-lobby-host small {
+  color: #918577;
+  font-size: 0.6rem;
+}
+
+.public-lobby-seats {
+  display: grid;
+  justify-items: center;
+  padding: 8px;
+  border: 1px solid rgba(122, 211, 233, 0.24);
+  background: rgba(3, 7, 12, 0.55);
+}
+
+.public-lobby-seats strong {
+  color: #8ee7fa;
+  font-family: Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.public-lobby-card > button {
+  min-height: 48px;
+}
+
+.public-lobby-message {
+  min-height: 30px;
+  margin: 2px 18px 10px;
+  color: #9f927f;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.private-room-options {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  margin: 0 18px 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(182, 142, 78, 0.25);
+  gap: 12px;
+  background: rgba(5, 6, 11, 0.54);
+}
+
+.private-room-options > div {
+  display: grid;
+}
+
+.private-room-options strong {
+  color: #d9bd84;
+  font-family: Georgia, serif;
+  font-size: 0.78rem;
+}
+
+.private-room-options span {
+  color: #83796b;
+  font-size: 0.62rem;
+}
+
+.public-lobbies-panel > button:last-child {
+  display: block;
+  min-width: 180px;
+  margin: 0 auto;
 }
 
 .lobby-player-list {
@@ -1916,6 +2079,70 @@ h1 span {
   .empty-avatar {
     width: 35px;
     height: 35px;
+  }
+
+  .public-lobbies-panel {
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .public-lobbies-hero {
+    min-height: 180px;
+    padding: 24px 18px;
+  }
+
+  .public-lobbies-hero p:last-child {
+    font-size: 0.7rem;
+  }
+
+  .public-lobby-actions {
+    grid-template-columns: 1fr;
+    padding: 10px 10px 4px;
+  }
+
+  .public-lobby-list {
+    padding: 6px 10px;
+  }
+
+  .public-lobby-card {
+    grid-template-columns: 50px minmax(0, 1fr) 72px;
+    min-height: 0;
+    padding: 9px;
+    gap: 8px;
+  }
+
+  .public-lobby-card > img {
+    width: 47px;
+  }
+
+  .public-lobby-host strong {
+    font-size: 0.82rem;
+  }
+
+  .public-lobby-seats {
+    padding: 5px;
+  }
+
+  .public-lobby-seats strong {
+    font-size: 1rem;
+  }
+
+  .public-lobby-seats span {
+    font-size: 0.37rem;
+  }
+
+  .public-lobby-card > button {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .public-lobby-message {
+    margin-inline: 10px;
+  }
+
+  .private-room-options {
+    grid-template-columns: 1fr;
+    margin-inline: 10px;
   }
 
   .profile-editor-heading > img {

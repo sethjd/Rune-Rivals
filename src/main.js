@@ -44,6 +44,8 @@ let lastMode = "ai";
 let lastRoomCode = "";
 let lastStartOptions = {};
 let selectedCodexId = "fire";
+let publicLobbyLoadToken = 0;
+let publicLobbyRefreshTimer = null;
 
 const game = new RuneRivalsGame(ui, {
   onGameOver: (won, summary) => handleGameOver(won, summary),
@@ -121,7 +123,10 @@ document.addEventListener("click", async (event) => {
     updateAudioButtons();
   }
   if (action === "show-help") ui.showScreen("help-screen");
+  if (action === "show-lobbies") showPublicLobbies();
+  if (action === "refresh-lobbies") await loadPublicLobbies(button);
   if (action === "show-join") {
+    stopPublicLobbyRefresh();
     document.querySelector("#join-message").textContent = "";
     ui.showScreen("join-screen");
   }
@@ -131,10 +136,12 @@ document.addEventListener("click", async (event) => {
     if (lastMode === "online") returnToMenu();
     else startGame(lastMode, lastRoomCode, lastStartOptions);
   }
-  if (action === "create-room") await createRoom(button);
+  if (action === "create-public-room") await createRoom(button, "public");
+  if (action === "create-private-room") await createRoom(button, "private");
   if (action === "join-room") await joinRoom(button);
+  if (action === "join-public-lobby") await joinPublicLobby(button);
   if (action === "start-online-match") await startOnlineMatch(button);
-  if (action === "leave-room") returnToMenu();
+  if (action === "leave-room") leaveOnlineRoom();
 });
 
 document.querySelector("#room-code-input").addEventListener("input", (event) => {
@@ -607,35 +614,122 @@ function romanNumeral(value) {
   return ["I", "II", "III", "IV", "V"][Number(value) - 1] ?? String(value);
 }
 
-async function createRoom(button) {
+function showPublicLobbies() {
+  stopPublicLobbyRefresh();
+  game.stop();
+  multiplayer.leave();
+  publicLobbyLoadToken += 1;
+  document.querySelector("#public-lobby-list").replaceChildren();
+  document.querySelector("#public-lobby-message").textContent = multiplayer.configured
+    ? "Searching for open arenas..."
+    : "Online lobbies need Firebase to be configured.";
+  ui.showScreen("public-lobbies-screen");
+  if (multiplayer.configured) {
+    loadPublicLobbies();
+    publicLobbyRefreshTimer = globalThis.setInterval(() => {
+      if (document.querySelector("#public-lobbies-screen").classList.contains("active")) {
+        loadPublicLobbies();
+      }
+    }, 10000);
+  }
+}
+
+async function loadPublicLobbies(button) {
+  if (!multiplayer.configured) return showFirebaseMessage();
+  const loadToken = ++publicLobbyLoadToken;
+  if (button) setButtonBusy(button, true);
+  document.querySelector("#public-lobby-message").textContent = "Searching for open arenas...";
+  try {
+    const lobbies = await multiplayer.listPublicLobbies();
+    if (loadToken !== publicLobbyLoadToken) return;
+    renderPublicLobbies(lobbies);
+  } catch (error) {
+    if (loadToken !== publicLobbyLoadToken) return;
+    document.querySelector("#public-lobby-message").textContent = error.message;
+  } finally {
+    if (button) setButtonBusy(button, false);
+  }
+}
+
+function renderPublicLobbies(lobbies) {
+  const list = document.querySelector("#public-lobby-list");
+  list.innerHTML = lobbies.map((lobby) => {
+    const openSeats = Math.max(0, lobby.maxPlayers - lobby.playerCount);
+    return `<article class="public-lobby-card">
+      <img src="${avatarDataUri(lobby.hostAvatarId)}" alt="">
+      <div class="public-lobby-host">
+        <span>Hosted by</span>
+        <strong>${escapeHtml(lobby.hostName)}</strong>
+        <small>Waiting ${formatLobbyAge(lobby.createdAt)}</small>
+      </div>
+      <div class="public-lobby-seats" aria-label="${lobby.playerCount} of ${lobby.maxPlayers} players">
+        <strong>${lobby.playerCount}/${lobby.maxPlayers}</strong>
+        <span>${openSeats} open ${openSeats === 1 ? "seat" : "seats"}</span>
+      </div>
+      <button class="primary-button" data-action="join-public-lobby" data-room-code="${lobby.roomCode}">
+        Join Arena
+      </button>
+    </article>`;
+  }).join("");
+  document.querySelector("#public-lobby-message").textContent = lobbies.length
+    ? `${lobbies.length} open ${lobbies.length === 1 ? "arena" : "arenas"} found.`
+    : "No public games are waiting right now. Host one and other players can join you.";
+}
+
+async function createRoom(button, visibility = "public") {
   if (!multiplayer.configured) return showFirebaseMessage();
   setButtonBusy(button, true);
   try {
-    const code = await multiplayer.createRoom(profile, onlineHandlers());
+    const code = await multiplayer.createRoom(profile, onlineHandlers(), { visibility });
     document.querySelector("#room-code-display").textContent = code;
-    document.querySelector("#lobby-message").textContent = "Waiting for players to join...";
+    document.querySelector("#lobby-message").textContent = visibility === "public"
+      ? "Your arena is public. Waiting for rune mages to join..."
+      : "Private room ready. Share the invite code with friends.";
+    stopPublicLobbyRefresh();
     ui.showScreen("lobby-screen");
   } catch (error) {
-    showMenuMessage(error.message);
+    const message = visibility === "public"
+      ? document.querySelector("#public-lobby-message")
+      : document.querySelector("#join-message");
+    message.textContent = error.message;
   } finally {
     setButtonBusy(button, false);
   }
 }
 
 async function joinRoom(button) {
-  if (!multiplayer.configured) return showFirebaseMessage();
   const code = document.querySelector("#room-code-input").value;
-  if (code.length !== 6) {
-    document.querySelector("#join-message").textContent = "Enter the 6-character room code.";
-    return;
+  await joinRoomByCode(code, button, document.querySelector("#join-message"));
+}
+
+async function joinPublicLobby(button) {
+  const code = button.dataset.roomCode;
+  const message = document.querySelector("#public-lobby-message");
+  const joined = await joinRoomByCode(code, button, message);
+  if (!joined) {
+    const errorMessage = message.textContent;
+    await loadPublicLobbies();
+    message.textContent = `${errorMessage} The open-game list is now up to date.`;
+  }
+}
+
+async function joinRoomByCode(code, button, messageElement) {
+  if (!multiplayer.configured) return showFirebaseMessage();
+  const normalizedCode = String(code || "").toUpperCase();
+  if (normalizedCode.length !== 6) {
+    messageElement.textContent = "That lobby does not have a valid room code.";
+    return false;
   }
   setButtonBusy(button, true);
   try {
-    await multiplayer.joinRoom(code, profile, onlineHandlers());
-    document.querySelector("#room-code-display").textContent = code;
+    await multiplayer.joinRoom(normalizedCode, profile, onlineHandlers());
+    document.querySelector("#room-code-display").textContent = normalizedCode;
+    stopPublicLobbyRefresh();
     ui.showScreen("lobby-screen");
+    return true;
   } catch (error) {
-    document.querySelector("#join-message").textContent = error.message;
+    messageElement.textContent = `${error.message} Refresh the arena list and try another game.`;
+    return false;
   } finally {
     setButtonBusy(button, false);
   }
@@ -700,15 +794,25 @@ function onlineHandlers() {
       }
     },
     onRoomClosed: () => {
+      const wasPublic = multiplayer.latestRoom?.visibility === "public";
       if (lastMode === "online" && game.running) game.stop();
-      showMenuMessage("The online room was closed.");
-      ui.showScreen("menu-screen");
+      if (wasPublic) {
+        showPublicLobbies();
+        document.querySelector("#public-lobby-message").textContent =
+          "That arena closed. The open-game list has been refreshed.";
+      } else {
+        showMenuMessage("The online room was closed.");
+        ui.showScreen("menu-screen");
+      }
     }
   };
 }
 
 function renderOnlineLobby(room) {
   document.querySelector("#room-code-display").textContent = room.roomCode;
+  document.querySelector("#lobby-visibility-label").textContent = room.visibility === "public"
+    ? "Public online lobby"
+    : "Private online lobby";
   const connected = room.players.filter((player) => player.connected !== false);
   const list = document.querySelector("#lobby-player-list");
   const cards = [];
@@ -745,11 +849,28 @@ function renderOnlineLobby(room) {
   startButton.classList.toggle("hidden", !room.isHost || room.status !== "waiting");
   startButton.disabled = connected.length < 2;
   document.querySelector("#lobby-message").textContent = room.status === "waiting"
-    ? `${connected.length}/6 players joined${room.isHost ? ". Start when everyone is ready." : ". Waiting for the host to start."}`
+    ? `${connected.length}/6 players joined${room.isHost
+      ? room.visibility === "public"
+        ? ". Your game is visible in Open Arenas."
+        : ". Share the code, then start when everyone is ready."
+      : ". Waiting for the host to start."}`
     : "The match is starting...";
 }
 
+function leaveOnlineRoom() {
+  const wasPublic = multiplayer.latestRoom?.visibility === "public";
+  game.stop();
+  multiplayer.leave();
+  if (wasPublic) showPublicLobbies();
+  else {
+    renderMenuProfile();
+    ui.showScreen("menu-screen");
+  }
+}
+
 function returnToMenu() {
+  publicLobbyLoadToken += 1;
+  stopPublicLobbyRefresh();
   game.stop();
   multiplayer.leave();
   renderMenuProfile();
@@ -786,6 +907,19 @@ function showMenuMessage(message) {
 function setButtonBusy(button, busy) {
   button.disabled = busy;
   button.classList.toggle("loading", busy);
+}
+
+function stopPublicLobbyRefresh() {
+  if (!publicLobbyRefreshTimer) return;
+  globalThis.clearInterval(publicLobbyRefreshTimer);
+  publicLobbyRefreshTimer = null;
+}
+
+function formatLobbyAge(createdAt) {
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - Number(createdAt || Date.now())) / 60000));
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes === 1) return "1 minute";
+  return `${Math.min(99, elapsedMinutes)} minutes`;
 }
 
 if (!multiplayer.configured) {

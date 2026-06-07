@@ -7,6 +7,14 @@
         ".validate": "newData.hasChildren(['status', 'players'])"
       }
     },
+    "publicLobbies": {
+      ".read": "auth != null",
+      ".indexOn": ["updatedAt"],
+      "$roomCode": {
+        ".write": "auth != null && ((newData.exists() && newData.child('hostUid').val() === auth.uid && root.child('rooms').child($roomCode).child('hostId').val() === newData.child('hostId').val() && root.child('rooms').child($roomCode).child('players').child(newData.child('hostId').val()).child('authUid').val() === auth.uid) || (!newData.exists() && (data.child('hostUid').val() === auth.uid || root.child('rooms').child($roomCode).child('players').child(root.child('rooms').child($roomCode).child('hostId').val()).child('authUid').val() === auth.uid)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['roomCode', 'hostId', 'hostUid', 'hostName', 'hostAvatarId', 'playerCount', 'maxPlayers', 'status', 'createdAt', 'updatedAt']) && newData.child('roomCode').val() === $roomCode && newData.child('status').val() === 'waiting' && root.child('rooms').child($roomCode).child('status').val() === 'waiting' && root.child('rooms').child($roomCode).child('visibility').val() === 'public' && newData.child('hostName').isString() && newData.child('hostName').val().length > 0 && newData.child('hostName').val().length <= 16 && newData.child('hostAvatarId').isString() && newData.child('hostAvatarId').val().length <= 32 && newData.child('playerCount').isNumber() && newData.child('playerCount').val() >= 1 && newData.child('playerCount').val() <= 6 && newData.child('maxPlayers').val() === 6 && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 60000)"
+      }
+    },
     "leaderboard": {
       ".read": true,
       ".indexOn": ["leaguePoints"],

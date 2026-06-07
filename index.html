@@ -56,8 +56,7 @@
         <div class="menu-actions">
           <button class="primary-button" data-action="show-story">Story Mode</button>
           <button class="primary-button" data-action="show-duel">Quick Duel</button>
-          <button data-action="create-room">Create Online Room</button>
-          <button data-action="show-join">Join Online Room</button>
+          <button class="primary-button online-play-button" data-action="show-lobbies">Find Online Game</button>
           <button data-action="show-leaderboard">Arcane League</button>
           <button data-action="show-codex">Spell Codex</button>
           <button class="text-button" data-action="show-help">How to Play</button>
@@ -245,25 +244,50 @@
         </div>
       </section>
 
+      <section id="public-lobbies-screen" class="screen panel-screen" aria-labelledby="public-lobbies-title">
+        <div class="panel public-lobbies-panel">
+          <header class="public-lobbies-hero">
+            <p class="eyebrow">Online matchmaking</p>
+            <h2 id="public-lobbies-title">Open Arenas</h2>
+            <p>Join a waiting game instantly, or host an arena for other rune mages to find.</p>
+          </header>
+          <div class="public-lobby-actions">
+            <button class="primary-button" data-action="create-public-room">Host Public Lobby</button>
+            <button id="public-lobby-refresh" data-action="refresh-lobbies">Refresh Games</button>
+          </div>
+          <div id="public-lobby-list" class="public-lobby-list" aria-live="polite"></div>
+          <p id="public-lobby-message" class="public-lobby-message">Searching for open arenas...</p>
+          <div class="private-room-options">
+            <div>
+              <strong>Playing with friends?</strong>
+              <span>Private rooms stay hidden and use an invite code.</span>
+            </div>
+            <button data-action="show-join">Friend Code</button>
+          </div>
+          <button data-action="back-menu">Return to Menu</button>
+        </div>
+      </section>
+
       <section id="join-screen" class="screen panel-screen" aria-labelledby="join-title">
         <div class="panel modal-panel">
-          <p class="eyebrow">Online duel</p>
-          <h2 id="join-title">Join a Room</h2>
+          <p class="eyebrow">Private online duel</p>
+          <h2 id="join-title">Friend Code</h2>
           <label for="room-code-input">Room code</label>
           <input id="room-code-input" maxlength="6" autocomplete="off" inputmode="text" placeholder="ABC123">
           <p id="join-message" class="form-message"></p>
           <div class="row-actions">
             <button class="primary-button" data-action="join-room">Join</button>
-            <button data-action="back-menu">Back</button>
+            <button data-action="create-private-room">Host Private</button>
           </div>
+          <button data-action="show-lobbies">Back to Open Arenas</button>
         </div>
       </section>
 
       <section id="lobby-screen" class="screen panel-screen" aria-labelledby="lobby-title">
         <div class="panel online-lobby-panel">
-          <p class="eyebrow">Online elimination duel</p>
+          <p id="lobby-visibility-label" class="eyebrow">Public online lobby</p>
           <h2 id="lobby-title">Waiting Room</h2>
-          <p class="room-code-label">Share this code</p>
+          <p class="room-code-label">Optional invite code</p>
           <div id="room-code-display" class="room-code">------</div>
           <p id="lobby-message">Waiting for players to join...</p>
           <div id="lobby-player-list" class="lobby-player-list" aria-live="polite"></div>

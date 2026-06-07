@@ -1,17 +1,20 @@
 import { hasFirebaseConfig } from "./firebase-config.js";
 import { initializeFirebase } from "./firebase.js";
 import {
+  buildPublicLobbyListing,
   disconnectedTooLong,
   eliminatePlayer,
   finishWhenOneRemains,
   livingPlayers,
   MAX_ROOM_PLAYERS,
   nextLivingTarget,
+  normalizePublicLobbyListings,
   roomPlayers
 } from "./multiplayer-logic.js";
 
 const DISCONNECT_GRACE_MS = 15000;
 const ROOM_TRANSACTION_ATTEMPTS = 5;
+const PUBLIC_LOBBY_HEARTBEAT_MS = 45000;
 const wait = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
 export class MultiplayerClient {
@@ -27,6 +30,7 @@ export class MultiplayerClient {
     this.currentTargetId = "";
     this.currentTargetState = null;
     this.sessionToken = 0;
+    this.lastPublicLobbyFingerprint = "";
     this.resetStateSync();
   }
 
@@ -43,17 +47,17 @@ export class MultiplayerClient {
     this.authUid = user.uid;
   }
 
-  async createRoom(profile, handlers) {
+  async createRoom(profile, handlers, { visibility = "public" } = {}) {
     await this.initialize();
     this.leave();
     this.roomCode = makeRoomCode();
     this.playerId = makePlayerId();
     this.playerSeat = 1;
     this.isHost = true;
-    const { ref, set } = this.api;
-
-    await set(ref(this.db, `rooms/${this.roomCode}`), {
+    const { ref, set, remove } = this.api;
+    const room = {
       status: "waiting",
+      visibility: visibility === "private" ? "private" : "public",
       hostId: this.playerId,
       createdAt: Date.now(),
       seats: {
@@ -62,11 +66,37 @@ export class MultiplayerClient {
       players: {
         [this.playerId]: playerRecord(profile, 1, this.authUid)
       }
-    });
+    };
+
+    const roomRef = ref(this.db, `rooms/${this.roomCode}`);
+    await set(roomRef, room);
+    if (room.visibility === "public") {
+      try {
+        await set(
+          ref(this.db, `publicLobbies/${this.roomCode}`),
+          buildPublicLobbyListing(this.roomCode, room)
+        );
+      } catch (error) {
+        await remove(roomRef).catch(() => {});
+        throw error;
+      }
+    }
 
     this.armPresence();
     this.subscribeRoom(handlers);
     return this.roomCode;
+  }
+
+  async listPublicLobbies() {
+    await this.initialize();
+    const { ref, query, orderByChild, limitToLast, get } = this.api;
+    const lobbyQuery = query(
+      ref(this.db, "publicLobbies"),
+      orderByChild("updatedAt"),
+      limitToLast(50)
+    );
+    const snapshot = await get(lobbyQuery);
+    return normalizePublicLobbyListings(snapshot.val());
   }
 
   async joinRoom(code, profile, handlers) {
@@ -200,6 +230,8 @@ export class MultiplayerClient {
     this.handlers = handlers;
     this.roomMeta = {
       status: undefined,
+      visibility: undefined,
+      createdAt: undefined,
       hostId: undefined,
       playerCount: undefined,
       winnerId: undefined,
@@ -220,7 +252,7 @@ export class MultiplayerClient {
       }));
     };
 
-    for (const key of ["status", "hostId", "playerCount", "winnerId", "finishedAt", "players"]) watch(key);
+    for (const key of ["status", "visibility", "createdAt", "hostId", "playerCount", "winnerId", "finishedAt", "players"]) watch(key);
 
     this.unsubscribers.push(onChildAdded(attacksRef, (snapshot) => {
       if (token !== this.sessionToken) return;
@@ -253,6 +285,8 @@ export class MultiplayerClient {
     if (!this.roomMeta || this.roomMeta.status == null || this.roomMeta.players === undefined) return;
     const room = {
       status: this.roomMeta.status,
+      visibility: this.roomMeta.visibility ?? "private",
+      createdAt: this.roomMeta.createdAt,
       hostId: this.roomMeta.hostId,
       playerCount: this.roomMeta.playerCount,
       winnerId: this.roomMeta.winnerId,
@@ -263,6 +297,7 @@ export class MultiplayerClient {
     this.latestRoom = room;
     this.isHost = room.hostId === this.playerId;
     this.ensureWaitingHost(room).catch(() => {});
+    this.managePublicLobby(room);
     this.handlers?.onLobby?.(this.roomView(room));
     this.manageDisconnectedPlayers(room);
 
@@ -290,19 +325,21 @@ export class MultiplayerClient {
     if (players.length < 2) throw new Error("At least two connected players are needed to start.");
 
     const activeIds = new Set(players.map((player) => player.id));
+    const roomPath = `rooms/${this.roomCode}`;
     const updates = {
-      status: "playing",
-      startedAt: Date.now(),
-      playerCount: players.length,
-      winnerId: null,
-      states: null,
-      attacks: null
+      [`${roomPath}/status`]: "playing",
+      [`${roomPath}/startedAt`]: Date.now(),
+      [`${roomPath}/playerCount`]: players.length,
+      [`${roomPath}/winnerId`]: null,
+      [`${roomPath}/states`]: null,
+      [`${roomPath}/attacks`]: null,
+      [`publicLobbies/${this.roomCode}`]: null
     };
     for (const player of roomPlayers(room)) {
-      updates[`players/${player.id}/alive`] = activeIds.has(player.id);
-      updates[`players/${player.id}/placement`] = null;
+      updates[`${roomPath}/players/${player.id}/alive`] = activeIds.has(player.id);
+      updates[`${roomPath}/players/${player.id}/placement`] = null;
     }
-    await update(roomRef, updates);
+    await update(ref(this.db), updates);
   }
 
   async syncState(state) {
@@ -522,6 +559,53 @@ export class MultiplayerClient {
     }
   }
 
+  managePublicLobby(room) {
+    const shouldPublish = (
+      room.visibility === "public" &&
+      room.status === "waiting" &&
+      this.isHost
+    );
+    if (shouldPublish) {
+      this.syncPublicLobby(room).catch(() => {});
+      this.startPublicLobbyHeartbeat();
+    } else {
+      this.stopPublicLobbyHeartbeat();
+      if (this.isHost && room.visibility === "public") this.removePublicLobby().catch(() => {});
+    }
+  }
+
+  async syncPublicLobby(room = this.latestRoom, force = false) {
+    if (!this.db || !this.roomCode || !this.isHost) return;
+    const listing = buildPublicLobbyListing(this.roomCode, room);
+    if (!listing) return;
+    const fingerprint = JSON.stringify({ ...listing, updatedAt: 0 });
+    if (!force && fingerprint === this.lastPublicLobbyFingerprint) return;
+    this.lastPublicLobbyFingerprint = fingerprint;
+    listing.updatedAt = Date.now();
+    await this.api.set(
+      this.api.ref(this.db, `publicLobbies/${this.roomCode}`),
+      listing
+    );
+  }
+
+  async removePublicLobby(roomCode = this.roomCode) {
+    if (!this.db || !roomCode) return;
+    await this.api.remove(this.api.ref(this.db, `publicLobbies/${roomCode}`));
+  }
+
+  startPublicLobbyHeartbeat() {
+    if (this.publicLobbyHeartbeat) return;
+    this.publicLobbyHeartbeat = globalThis.setInterval(() => {
+      this.syncPublicLobby(this.latestRoom, true).catch(() => {});
+    }, PUBLIC_LOBBY_HEARTBEAT_MS);
+  }
+
+  stopPublicLobbyHeartbeat() {
+    if (!this.publicLobbyHeartbeat) return;
+    globalThis.clearInterval(this.publicLobbyHeartbeat);
+    this.publicLobbyHeartbeat = null;
+  }
+
   async runRoomTransaction(updateRoom, attempts = ROOM_TRANSACTION_ATTEMPTS) {
     if (!this.db || !this.roomCode) throw new Error("The online room is no longer available.");
     const { ref, get, runTransaction } = this.api;
@@ -561,6 +645,7 @@ export class MultiplayerClient {
       hostId: room.hostId,
       isHost: room.hostId === this.playerId,
       status: room.status,
+      visibility: room.visibility ?? "private",
       players,
       aliveCount: livingPlayers(room).length,
       totalPlayers: room.playerCount ?? players.length
@@ -571,11 +656,14 @@ export class MultiplayerClient {
     const roomCode = this.roomCode;
     const playerId = this.playerId;
     const roomStatus = this.latestRoom?.status;
+    const roomVisibility = this.latestRoom?.visibility;
+    const wasHost = this.isHost;
     const playerRef = this.db && roomCode && playerId
       ? this.api.ref(this.db, `rooms/${roomCode}/players/${playerId}`)
       : null;
 
     this.sessionToken += 1;
+    this.stopPublicLobbyHeartbeat();
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
     this.unsubscribers = [];
     this.unsubscribeTargetState();
@@ -583,6 +671,9 @@ export class MultiplayerClient {
     this.disconnectTimers.clear();
 
     if (playerRef) {
+      if (wasHost && roomStatus === "waiting" && roomVisibility === "public") {
+        this.removePublicLobby(roomCode).catch(() => {});
+      }
       this.api.onDisconnect(playerRef).cancel().catch(() => {});
       if (roomStatus === "playing") {
         const activeRoomCode = this.roomCode;
@@ -622,6 +713,7 @@ export class MultiplayerClient {
     this.matchStarted = false;
     this.resultDelivered = false;
     this.processedAttacks.clear();
+    this.lastPublicLobbyFingerprint = "";
     this.resetStateSync();
   }
 
