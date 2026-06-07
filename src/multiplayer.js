@@ -117,6 +117,12 @@ export class MultiplayerClient {
       throw new Error("That match has already started.");
     }
     const connectedPlayers = roomPlayers(initialRoom).filter((player) => player.connected !== false);
+    if (connectedPlayers.some((player) => player.authUid === this.authUid)) {
+      this.clearFailedJoin();
+      throw new Error(
+        "This Firebase player is already in that room. Use another device, browser profile, or private window for the second player."
+      );
+    }
     if (connectedPlayers.length >= MAX_ROOM_PLAYERS) {
       this.clearFailedJoin();
       throw new Error("That room is full.");
@@ -140,10 +146,19 @@ export class MultiplayerClient {
         throw new Error("That match started while you were joining.");
       }
       const confirmedPlayers = roomPlayers(confirmedRoom).filter((player) => player.connected !== false);
-      if (!confirmedRoom.players?.[this.playerId] || confirmedPlayers.length > MAX_ROOM_PLAYERS) {
+      const matchingIdentities = confirmedPlayers.filter((player) => player.authUid === this.authUid);
+      if (
+        !confirmedRoom.players?.[this.playerId] ||
+        confirmedPlayers.length > MAX_ROOM_PLAYERS ||
+        matchingIdentities.length > 1
+      ) {
         await remove(playerRef);
         await this.releaseSeatClaim();
-        throw new Error("That room became full while you were joining.");
+        throw new Error(
+          matchingIdentities.length > 1
+            ? "That Firebase player already occupies another seat. Use another device, browser profile, or private window."
+            : "That room became full while you were joining."
+        );
       }
     } catch (error) {
       if (this.playerSeat) await this.releaseSeatClaim().catch(() => {});
@@ -323,6 +338,12 @@ export class MultiplayerClient {
 
     const players = roomPlayers(room).filter((player) => player.connected !== false);
     if (players.length < 2) throw new Error("At least two connected players are needed to start.");
+    const identityCount = new Set(players.map((player) => player.authUid).filter(Boolean)).size;
+    if (identityCount !== players.length) {
+      throw new Error(
+        "Every seat needs a separate Firebase player. Rejoin duplicate seats from another device, browser profile, or private window."
+      );
+    }
 
     const activeIds = new Set(players.map((player) => player.id));
     const roomPath = `rooms/${this.roomCode}`;

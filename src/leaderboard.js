@@ -1,4 +1,5 @@
 import { initializeFirebase } from "./firebase.js";
+import { firebaseConfig } from "./firebase-config.js";
 import { mageRank } from "./profile.js";
 
 const PENDING_RESULTS_KEY = "rune-rivals-pending-league-v1";
@@ -10,32 +11,35 @@ export class LeaderboardClient {
     this.userId = "";
   }
 
-  async fetch(profile) {
-    const { db, databaseModule, user } = await initializeFirebase({ authenticate: true });
-    this.userId = user.uid;
-    const leaderboardRef = databaseModule.ref(db, "leaderboard");
-    const topQuery = databaseModule.query(
-      leaderboardRef,
-      databaseModule.orderByChild("leaguePoints")
-    );
-    const snapshot = await databaseModule.get(topQuery);
-    const entries = [];
-    snapshot.forEach((child) => entries.push(normalizeEntry(child.key, child.val())));
-    entries.sort(compareEntries);
+  async fetchEntries() {
+    const endpoint = `${firebaseConfig.databaseURL.replace(/\/$/, "")}/leaderboard.json?cacheBust=${Date.now()}`;
+    const response = await fetch(endpoint, { cache: "no-store" });
+    if (!response.ok) throw new Error("The global rankings could not be loaded.");
+    return normalizeEntries(await response.json());
+  }
 
-    const personalSnapshot = await databaseModule.get(
-      databaseModule.ref(db, `leaderboard/${user.uid}`)
-    );
-    const personal = personalSnapshot.exists()
-      ? normalizeEntry(user.uid, personalSnapshot.val())
-      : unrankedEntry(user.uid, profile);
-    const personalRank = entries.findIndex((entry) => entry.uid === user.uid);
+  async identify() {
+    const { user } = await initializeFirebase({ authenticate: true });
+    this.userId = user.uid;
+    return user.uid;
+  }
+
+  viewFor(profile, entries = []) {
+    const personal = entries.find((entry) => entry.uid === this.userId)
+      ?? unrankedEntry(this.userId, profile);
+    const personalRank = entries.findIndex((entry) => entry.uid === this.userId);
 
     return {
       entries,
       personal,
       personalRank: personalRank >= 0 ? personalRank + 1 : null
     };
+  }
+
+  async fetch(profile) {
+    const entries = await this.fetchEntries();
+    await this.identify();
+    return this.viewFor(profile, entries);
   }
 
   async submitMatch(profile, result, { remember = true } = {}) {
@@ -144,6 +148,14 @@ export function compareEntries(a, b) {
     Number(a.lastMatchAt || 0) - Number(b.lastMatchAt || 0) ||
     a.name.localeCompare(b.name)
   );
+}
+
+export function normalizeEntries(value) {
+  const rows = value && typeof value === "object" ? value : {};
+  return Object.entries(rows)
+    .map(([uid, entry]) => normalizeEntry(uid, entry))
+    .filter((entry) => entry.uid)
+    .sort(compareEntries);
 }
 
 export function buildLeaderboardEntry(current, profile, result, uid, updatedAt = Date.now()) {

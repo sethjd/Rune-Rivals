@@ -439,12 +439,24 @@ async function loadLeaderboard(button) {
     return;
   }
   if (button) setButtonBusy(button, true);
+  let entries = [];
   try {
-    await leaderboard.retryPending(profile);
-    const data = await leaderboard.fetch(profile);
-    renderLeaderboard(data);
+    entries = await leaderboard.fetchEntries();
+    renderLeaderboard(leaderboard.viewFor(profile, entries));
   } catch (error) {
     document.querySelector("#leaderboard-message").textContent = error.message;
+    if (button) setButtonBusy(button, false);
+    return;
+  }
+
+  try {
+    await leaderboard.identify();
+    await leaderboard.retryPending(profile);
+    entries = await leaderboard.fetchEntries();
+    renderLeaderboard(leaderboard.viewFor(profile, entries));
+  } catch (error) {
+    document.querySelector("#leaderboard-message").textContent =
+      `Showing all ${entries.length} season rankings. Your personal account sync is paused: ${error.message}`;
   } finally {
     if (button) setButtonBusy(button, false);
   }
@@ -468,13 +480,13 @@ function renderLeaderboard({ entries, personal, personalRank }) {
   document.querySelector("#league-list").innerHTML = entries.map((entry, index) => `
     <article class="league-row ${entry.uid === leaderboard.userId ? "you" : ""}">
       <strong>${index + 1}</strong>
-      <div><img src="${avatarDataUri(entry.avatarId)}" alt=""><span><b>${escapeHtml(entry.name)}</b><small>${escapeHtml(entry.leagueTier)}</small></span></div>
+      <div><img src="${avatarDataUri(entry.avatarId)}" alt=""><span><b>${escapeHtml(entry.name)}</b><small>${escapeHtml(entry.leagueTier)} &middot; ${entry.onlineMatches} matches &middot; last ${placementLabel(entry.lastPlace)}</small></span></div>
       <span>${entry.onlineWins}</span>
       <b>${entry.leaguePoints.toLocaleString()}</b>
     </article>
   `).join("");
   document.querySelector("#leaderboard-message").textContent = entries.length
-    ? `Showing the top ${entries.length} ranked mages.`
+    ? `Showing all ${entries.length} season rankings. Ordered by total League Points, never by lobby host.`
     : "No ranked matches yet. The first crown can claim the hall.";
 }
 
@@ -640,6 +652,22 @@ function starMarkup(count) {
 
 function romanNumeral(value) {
   return ["I", "II", "III", "IV", "V"][Number(value) - 1] ?? String(value);
+}
+
+function placementLabel(place) {
+  const value = Math.max(0, Number(place) || 0);
+  if (!value) return "-";
+  const mod100 = value % 100;
+  const suffix = mod100 >= 11 && mod100 <= 13
+    ? "th"
+    : value % 10 === 1
+      ? "st"
+      : value % 10 === 2
+        ? "nd"
+        : value % 10 === 3
+          ? "rd"
+          : "th";
+  return `${value}${suffix}`;
 }
 
 function showPublicLobbies() {

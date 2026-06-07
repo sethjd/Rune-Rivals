@@ -25,6 +25,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Host-controlled online waiting rooms for 2-6 players
 - Ring-based attacks, elimination retargeting, and final placement results
 - Anonymous Firebase accounts for persistent online identity
+- Duplicate Firebase identities are blocked from occupying multiple seats in one ranked room
 - Arcane League rankings with points, crowns, podiums, and win streaks
 - Match-linked leaderboard updates that reject duplicate and older room results
 - Arcane Surge ultimate ability charged by spellcasting
@@ -156,7 +157,7 @@ assets/
 - AI plans one piece at a time and does not search future pieces.
 - Profiles and story progress are saved locally on each browser/device.
 - Separate music/effects volume controls, accessibility audio settings, and a guided tutorial are not included yet.
-- The service worker uses a cache-first app shell. During development, refresh after changing its cache version.
+- The service worker checks the network first for app code and falls back to its offline cache.
 
 ## Good Next Steps
 

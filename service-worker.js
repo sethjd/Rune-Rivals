@@ -1,4 +1,4 @@
-const CACHE_NAME = "rune-rivals-v17";
+const CACHE_NAME = "rune-rivals-v18";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -69,6 +69,24 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   if (new URL(event.request.url).origin !== self.location.origin) return;
+
+  const networkFirst = (
+    event.request.mode === "navigate" ||
+    ["script", "style", "manifest"].includes(event.request.destination)
+  );
+  if (networkFirst) {
+    event.respondWith(
+      fetch(event.request).then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      }).catch(() => (
+        caches.match(event.request).then((cached) => cached || caches.match("./index.html"))
+      ))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       const copy = response.clone();
