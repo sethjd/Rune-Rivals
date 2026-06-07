@@ -1,4 +1,5 @@
 import { BOARD_HEIGHT, BOARD_WIDTH, RUNE_DATA } from "./constants.js";
+import { storyObjectiveLabels } from "./story.js";
 
 export class GameUI {
   constructor() {
@@ -39,9 +40,10 @@ export class GameUI {
     this.renderNext(document.querySelector("#enemy-next"), game.enemyNext);
     this.renderNext(document.querySelector("#player-hold"), game.playerHold);
     this.renderNext(document.querySelector("#enemy-hold"), game.enemyHold);
-    const holdButton = document.querySelector("#hold-button");
-    holdButton.disabled = game.holdUsed.player || game.resolving || game.over || game.paused;
-    holdButton.classList.toggle("used", game.holdUsed.player);
+    for (const holdButton of document.querySelectorAll('[data-control="hold"]')) {
+      holdButton.disabled = game.holdUsed.player || game.resolving || game.over || game.paused;
+      holdButton.classList.toggle("used", game.holdUsed.player);
+    }
     this.renderSurge(game);
     this.renderDanger(game);
     document.querySelector("#battle-status").textContent = game.paused
@@ -51,7 +53,7 @@ export class GameUI {
         : "Rune Duel";
     if (game.mode !== "online") {
       document.querySelector("#target-status").textContent = game.mode === "story"
-        ? "STAR GOALS: WIN / FINISH AT 50% HP / 2X CHAIN OR UNDER 1:30"
+        ? `STAR GOALS: ${storyObjectiveLabels(game.options.storyLevel).join(" / ").toUpperCase()}`
         : "";
     }
     this.pauseOverlay.classList.toggle("hidden", !game.paused);

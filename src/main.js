@@ -23,7 +23,14 @@ import {
   saveProfile,
   totalStoryStars
 } from "./profile.js";
-import { getStoryLevel, STORY_LEVELS } from "./story.js";
+import {
+  getStoryChapter,
+  getStoryLevel,
+  STORY_CHAPTERS,
+  STORY_LEVELS,
+  storyObjectiveLabels,
+  storyRatingFor
+} from "./story.js";
 import { GameUI } from "./ui.js";
 
 const ui = new GameUI();
@@ -209,11 +216,9 @@ function handleGameOver(won, summary = game.getBattleSummary(won)) {
       profile = completeStoryLevel(profile, selectedStoryLevel.number, stars);
       renderMenuProfile();
       renderStoryMap();
-      message = selectedStoryLevel.number === STORY_LEVELS.length
-        ? "The rift is sealed. You restored the Shattered Sigil!"
-        : `${selectedStoryLevel.opponent} is defeated. The path ahead is open.`;
+      message = `${selectedStoryLevel.victory} Relic recovered: ${selectedStoryLevel.reward}.`;
     } else {
-      message = `${selectedStoryLevel.opponent} holds the path. Adjust your rune craft and try again.`;
+      message = selectedStoryLevel.defeat;
     }
     showStoryResultButtons(won);
     renderResultStars(stars, won);
@@ -298,40 +303,72 @@ function showStory() {
 
 function renderStoryMap() {
   const container = document.querySelector("#story-levels");
-  container.innerHTML = STORY_LEVELS.map((level) => {
-    const locked = level.number > profile.unlockedLevel;
-    const complete = profile.completedLevels.includes(level.number);
-    const stars = Number(profile.storyStars?.[level.number] ?? 0);
-    return `<button class="story-node ${locked ? "locked" : ""} ${complete ? "complete" : ""}"
-      data-level="${level.number}" ${locked ? "disabled" : ""}
-      aria-label="Level ${level.number}: ${level.title}${locked ? ", locked" : ""}">
-      <span>${level.number}</span>
-      <small>${complete ? starMarkup(stars) : ""}</small>
-    </button>`;
+  container.innerHTML = STORY_CHAPTERS.map((chapter) => {
+    const chapterLevels = STORY_LEVELS.filter((level) => level.chapter === chapter.number);
+    const completed = chapterLevels.filter((level) => profile.completedLevels.includes(level.number)).length;
+    const locked = chapterLevels.every((level) => level.number > profile.unlockedLevel);
+    const nodes = chapterLevels.map((level) => {
+      const levelLocked = level.number > profile.unlockedLevel;
+      const complete = profile.completedLevels.includes(level.number);
+      const stars = Number(profile.storyStars?.[level.number] ?? 0);
+      return `<button class="story-node ${levelLocked ? "locked" : ""} ${complete ? "complete" : ""}"
+        data-level="${level.number}" data-chapter="${chapter.number}" ${levelLocked ? "disabled" : ""}
+        aria-label="Level ${level.number}: ${level.title}${levelLocked ? ", locked" : ""}">
+        <span>${level.number}</span>
+        <small>${complete ? starMarkup(stars) : ""}</small>
+      </button>`;
+    }).join("");
+    return `<section class="story-chapter chapter-${chapter.number} ${locked ? "locked" : ""}">
+      <header>
+        <img src="${chapter.icon}" alt="">
+        <span>Chapter ${romanNumeral(chapter.number)}</span>
+        <strong>${escapeHtml(chapter.title)}</strong>
+        <small>${completed} / ${chapterLevels.length}</small>
+      </header>
+      <div class="story-chapter-nodes">${nodes}</div>
+    </section>`;
   }).join("");
+  const completedCount = STORY_LEVELS.filter((level) => (
+    profile.completedLevels.includes(level.number)
+  )).length;
+  document.querySelector("#story-campaign-progress").textContent =
+    `${completedCount} of ${STORY_LEVELS.length} duels complete · ${totalStoryStars(profile)} of 60 stars`;
 }
 
 function selectStoryLevel(levelNumber) {
   selectedStoryLevel = getStoryLevel(levelNumber);
-  document.querySelector("#story-level-label").textContent = `Level ${selectedStoryLevel.number} · ${selectedStoryLevel.title}`;
+  const chapter = getStoryChapter(selectedStoryLevel.chapter);
+  const completed = profile.completedLevels.includes(selectedStoryLevel.number);
+  const detail = document.querySelector("#story-detail");
+  detail.dataset.chapter = chapter.number;
+  document.querySelector("#story-level-label").textContent =
+    `Chapter ${romanNumeral(chapter.number)} · Level ${selectedStoryLevel.number} · ${selectedStoryLevel.title}`;
   document.querySelector("#story-opponent-name").textContent = selectedStoryLevel.opponent;
   document.querySelector("#story-description").textContent = selectedStoryLevel.description;
+  document.querySelector("#story-dialogue").textContent = selectedStoryLevel.challenge;
   document.querySelector("#story-quirk").textContent = selectedStoryLevel.quirk;
+  document.querySelector("#story-chapter-name").textContent = chapter.title;
+  document.querySelector("#story-chapter-lore").textContent = chapter.lore;
+  document.querySelector("#story-reward").textContent = selectedStoryLevel.reward;
   const bestStars = Number(profile.storyStars?.[selectedStoryLevel.number] ?? 0);
-  document.querySelector("#story-objectives").innerHTML = [
-    "Win the duel",
-    "Finish with at least 50% health",
-    "Create a 2x chain or win within 1:30"
-  ].map((objective, index) => (
+  document.querySelector("#story-objectives").innerHTML = storyObjectiveLabels(selectedStoryLevel).map((objective, index) => (
     `<span class="${index < bestStars ? "earned" : ""}"><b>&#9733;</b>${objective}</span>`
   )).join("");
   document.querySelector("#story-best-stars").textContent = bestStars
     ? `Best rating: ${starText(bestStars)}`
     : "Best rating: Not completed";
   document.querySelector("#story-opponent-avatar").src = avatarDataUri(selectedStoryLevel.avatarId);
+  document.querySelector("#story-opponent-avatar").alt = selectedStoryLevel.opponent;
   document.querySelector("#story-play-button").disabled = selectedStoryLevel.number > profile.unlockedLevel;
+  document.querySelector("#story-play-button").textContent = completed ? "Replay Duel" : "Begin Duel";
   for (const node of document.querySelectorAll(".story-node")) {
     node.classList.toggle("selected", Number(node.dataset.level) === selectedStoryLevel.number);
+  }
+  for (const chapterElement of document.querySelectorAll(".story-chapter")) {
+    chapterElement.classList.toggle(
+      "selected",
+      chapterElement.classList.contains(`chapter-${chapter.number}`)
+    );
   }
 }
 
@@ -368,6 +405,7 @@ async function loadLeaderboard(button) {
   }
   if (button) setButtonBusy(button, true);
   try {
+    await leaderboard.retryPending(profile);
     const data = await leaderboard.fetch(profile);
     renderLeaderboard(data);
   } catch (error) {
@@ -379,7 +417,7 @@ async function loadLeaderboard(button) {
 
 function renderLeaderboard({ entries, personal, personalRank }) {
   renderPersonalLeague(personal, personalRank);
-  document.querySelector("#league-podium").innerHTML = [1, 0, 2].map((index) => {
+  document.querySelector("#league-podium").innerHTML = [0, 1, 2].map((index) => {
     const entry = entries[index];
     const place = index + 1;
     if (!entry) return `<div class="podium-place podium-${place} empty"><span>${place}</span><strong>Open</strong><small>Awaiting a champion</small></div>`;
@@ -392,10 +430,9 @@ function renderLeaderboard({ entries, personal, personalRank }) {
     </article>`;
   }).join("");
 
-  const remaining = entries.slice(3);
-  document.querySelector("#league-list").innerHTML = remaining.map((entry, index) => `
+  document.querySelector("#league-list").innerHTML = entries.map((entry, index) => `
     <article class="league-row ${entry.uid === leaderboard.userId ? "you" : ""}">
-      <strong>${index + 4}</strong>
+      <strong>${index + 1}</strong>
       <div><img src="${avatarDataUri(entry.avatarId)}" alt=""><span><b>${escapeHtml(entry.name)}</b><small>${escapeHtml(entry.leagueTier)}</small></span></div>
       <span>${entry.onlineWins}</span>
       <b>${entry.leaguePoints.toLocaleString()}</b>
@@ -419,7 +456,7 @@ function renderPersonalLeague(entry, rank) {
 }
 
 function leaguePodiumPlaceholders() {
-  return [2, 1, 3].map((place) => (
+  return [1, 2, 3].map((place) => (
     `<div class="podium-place podium-${place} empty"><span>${place}</span><strong>Open</strong><small>Awaiting a champion</small></div>`
   )).join("");
 }
@@ -487,10 +524,7 @@ function hideStoryResultButtons() {
 }
 
 function storyRating(summary) {
-  let stars = 1;
-  if (Number(summary.hpPercent ?? 0) >= 50) stars += 1;
-  if (Number(summary.largestCombo ?? 0) >= 2 || Number(summary.elapsedMs ?? Infinity) <= 90000) stars += 1;
-  return Math.min(3, stars);
+  return storyRatingFor(selectedStoryLevel, summary, true);
 }
 
 function renderResultStars(stars, visible) {
@@ -567,6 +601,10 @@ function starText(count) {
 
 function starMarkup(count) {
   return Array.from({ length: 3 }, (_, index) => index < count ? "&#9733;" : "&#9734;").join("");
+}
+
+function romanNumeral(value) {
+  return ["I", "II", "III", "IV", "V"][Number(value) - 1] ?? String(value);
 }
 
 async function createRoom(button) {

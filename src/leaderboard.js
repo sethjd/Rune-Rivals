@@ -1,7 +1,9 @@
 import { initializeFirebase } from "./firebase.js";
 import { mageRank } from "./profile.js";
 
-const MAX_LEADERBOARD_ROWS = 50;
+const PENDING_RESULTS_KEY = "rune-rivals-pending-league-v1";
+const SUBMIT_ATTEMPTS = 5;
+const wait = (ms) => new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 
 export class LeaderboardClient {
   constructor() {
@@ -14,8 +16,7 @@ export class LeaderboardClient {
     const leaderboardRef = databaseModule.ref(db, "leaderboard");
     const topQuery = databaseModule.query(
       leaderboardRef,
-      databaseModule.orderByChild("leaguePoints"),
-      databaseModule.limitToLast(MAX_LEADERBOARD_ROWS)
+      databaseModule.orderByChild("leaguePoints")
     );
     const snapshot = await databaseModule.get(topQuery);
     const entries = [];
@@ -37,20 +38,34 @@ export class LeaderboardClient {
     };
   }
 
-  async submitMatch(profile, result) {
-    const { db, databaseModule, user } = await initializeFirebase({ authenticate: true });
-    this.userId = user.uid;
+  async submitMatch(profile, result, { remember = true } = {}) {
     const match = sanitizeMatchResult(result);
     if (!match.roomCode || !match.playerId || !match.finishedAt) {
       throw new Error("The room did not provide a complete league placement.");
     }
+    if (remember) rememberPendingMatch(match);
+
+    const { db, databaseModule, user } = await initializeFirebase({ authenticate: true });
+    this.userId = user.uid;
 
     const entryRef = databaseModule.ref(db, `leaderboard/${user.uid}`);
-    const transaction = await databaseModule.runTransaction(entryRef, (current) => {
-      return buildLeaderboardEntry(current, profile, match, user.uid);
-    }, { applyLocally: false });
+    let transaction;
+    let lastError;
+    for (let attempt = 0; attempt < SUBMIT_ATTEMPTS; attempt += 1) {
+      try {
+        transaction = await databaseModule.runTransaction(entryRef, (current) => {
+          return buildLeaderboardEntry(current, profile, match, user.uid);
+        }, { applyLocally: false });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < SUBMIT_ATTEMPTS - 1) await wait(250 * (attempt + 1));
+      }
+    }
+    if (!transaction) throw lastError ?? new Error("The league result could not be recorded.");
 
     if (!transaction.committed) {
+      forgetPendingMatch(match);
       return {
         duplicate: true,
         award: 0,
@@ -58,11 +73,23 @@ export class LeaderboardClient {
       };
     }
 
+    forgetPendingMatch(match);
     return {
       duplicate: false,
       award: Number(transaction.snapshot.val()?.lastAward || 0),
       entry: normalizeEntry(user.uid, transaction.snapshot.val())
     };
+  }
+
+  async retryPending(profile) {
+    const pending = readPendingMatches();
+    for (const match of pending) {
+      try {
+        await this.submitMatch(profile, match, { remember: false });
+      } catch {
+        // Keep the result queued until Firebase and the finished room are available.
+      }
+    }
   }
 }
 
@@ -185,4 +212,42 @@ function clampInteger(value, minimum, maximum) {
 
 function nonNegativeInteger(value) {
   return Math.max(0, Math.round(Number(value) || 0));
+}
+
+function pendingMatchKey(match) {
+  return `${match.roomCode}:${match.playerId}:${match.finishedAt}`;
+}
+
+function readPendingMatches() {
+  if (!globalThis.localStorage) return [];
+  try {
+    const stored = JSON.parse(globalThis.localStorage.getItem(PENDING_RESULTS_KEY));
+    return Array.isArray(stored) ? stored.map(sanitizeMatchResult).filter((match) => (
+      match.roomCode && match.playerId && match.finishedAt
+    )) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberPendingMatch(match) {
+  if (!globalThis.localStorage) return;
+  const pending = readPendingMatches();
+  const key = pendingMatchKey(match);
+  const next = [
+    ...pending.filter((entry) => pendingMatchKey(entry) !== key),
+    match
+  ].slice(-10);
+  globalThis.localStorage.setItem(PENDING_RESULTS_KEY, JSON.stringify(next));
+}
+
+function forgetPendingMatch(match) {
+  if (!globalThis.localStorage) return;
+  const key = pendingMatchKey(match);
+  const pending = readPendingMatches().filter((entry) => pendingMatchKey(entry) !== key);
+  if (pending.length) {
+    globalThis.localStorage.setItem(PENDING_RESULTS_KEY, JSON.stringify(pending));
+  } else {
+    globalThis.localStorage.removeItem(PENDING_RESULTS_KEY);
+  }
 }

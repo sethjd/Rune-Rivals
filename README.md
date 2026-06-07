@@ -14,7 +14,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - HP, shields, board-overflow penalties, victory, defeat, pause, and rematch
 - AI that scores possible placements and prefers immediate matches
 - Saved player profiles with custom names and 15 original avatars
-- A 20-level story journey with unlockable stages, named rivals, and battle quirks
+- A five-chapter, 20-level story campaign with rival dialogue, relics, lore, and battle quirks
 - Adjustable AI pacing and accuracy that ramps through the story
 - Original synthesized piano music and elemental attack sounds
 - Firebase Realtime Database room creation and joining
@@ -31,7 +31,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Earnable battle medals for health, speed, chains, spell volume, and damage
 - Premium painted arena art, danger warnings, damage numbers, and a refined battle HUD
 - Responsive desktop, portrait-phone, and landscape-phone layouts
-- Keyboard and large touch controls
+- Keyboard controls and a centered two-row mobile control deck with Hold
 - PWA manifest, service worker, offline app shell, and original icons
 - Original SVG rune, interface, arena, and spell artwork
 
@@ -57,6 +57,7 @@ Other static servers work too, including the VS Code Live Server extension.
 | Rotate | Up arrow | Rotate button |
 | Soft drop | Down arrow | Down button |
 | Hard drop | Space | Drop button |
+| Hold / swap | C | Hold button |
 | Pause | P | Top-right pause button |
 
 ## Enable Firebase Multiplayer
@@ -156,7 +157,7 @@ assets/
 
 1. Add anonymous Firebase Authentication and strict per-player database rules.
 2. Add room expiry and reconnection support.
-3. Add story dialogue scenes, rewards, and optional three-star level goals.
+3. Add animated story dialogue scenes and mechanical relic rewards.
 4. Add a short interactive tutorial and colour-blind rune patterns.
 5. Add original sound effects, haptics settings, and richer spell animation.
 6. Add online rematches, player display names, and match statistics.

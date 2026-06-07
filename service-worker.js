@@ -1,4 +1,4 @@
-const CACHE_NAME = "rune-rivals-v14";
+const CACHE_NAME = "rune-rivals-v15";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -41,6 +41,7 @@ const APP_SHELL = [
   "./assets/runes/junk.svg",
   "./assets/backgrounds/duel-arena.svg",
   "./assets/backgrounds/arcane-cathedral.webp",
+  "./assets/backgrounds/story-map-v2.webp",
   "./assets/backgrounds/spell-codex-v2.webp",
   "./assets/backgrounds/arcane-league.webp",
   "./assets/spells/fireball.svg",

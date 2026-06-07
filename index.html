@@ -215,6 +215,7 @@
           <div>
             <p class="eyebrow">The Shattered Sigil</p>
             <h2 id="story-title">Story Journey</h2>
+            <p id="story-campaign-progress" class="story-campaign-progress">Chapter I · 0 of 20 duels complete</p>
           </div>
           <button class="audio-toggle story-audio" data-action="toggle-audio" aria-label="Toggle music and sounds">♪</button>
         </header>
@@ -224,15 +225,23 @@
         </div>
         <div id="story-detail" class="panel story-detail">
           <img id="story-opponent-avatar" src="./assets/portraits/kael.svg" alt="">
-          <div>
+          <div class="story-detail-copy">
             <p id="story-level-label" class="eyebrow">Level 1</p>
             <h3 id="story-opponent-name">The Gatekeeper</h3>
-          <p id="story-description">Choose a level on the path.</p>
-          <p id="story-quirk" class="story-quirk"></p>
-          <div id="story-objectives" class="story-objectives" aria-label="Star objectives"></div>
-          <p id="story-best-stars" class="story-best-stars">Best: Not completed</p>
+            <p id="story-description">Choose a level on the path.</p>
+            <blockquote id="story-dialogue" class="story-dialogue"></blockquote>
+            <p id="story-quirk" class="story-quirk"></p>
+            <div id="story-objectives" class="story-objectives" aria-label="Star objectives"></div>
+            <p id="story-best-stars" class="story-best-stars">Best: Not completed</p>
           </div>
-          <button id="story-play-button" class="primary-button" data-action="play-story">Begin Duel</button>
+          <div class="story-level-meta">
+            <span>Chapter</span>
+            <strong id="story-chapter-name">The Waking Roads</strong>
+            <p id="story-chapter-lore" class="story-chapter-lore"></p>
+            <span>Relic</span>
+            <strong id="story-reward">Roadwarden's Mark</strong>
+            <button id="story-play-button" class="primary-button" data-action="play-story">Begin Duel</button>
+          </div>
         </div>
       </section>
 
@@ -278,6 +287,7 @@
             <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>3 delayed junk</span></div>
           </div>
           <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, C holds a piece, S casts Arcane Surge, and P pauses.</p>
+          <p><b>Touch:</b> the centered controls below the boards include move, spin, soft drop, Hold, Drop, and Surge.</p>
           <button class="primary-button" data-action="back-menu">Got it</button>
         </div>
       </section>
@@ -361,10 +371,11 @@
         </div>
 
         <nav class="touch-controls" aria-label="Game controls">
-          <button data-control="left" aria-label="Move left">&larr;</button>
-          <button data-control="right" aria-label="Move right">&rarr;</button>
-          <button data-control="rotate" aria-label="Rotate piece">&#8635;</button>
-          <button data-control="down" aria-label="Soft drop">&darr;</button>
+          <button class="move-left" data-control="left" aria-label="Move left">&larr;</button>
+          <button class="spin-control" data-control="rotate" aria-label="Spin piece">&#8635;<small>SPIN</small></button>
+          <button class="move-right" data-control="right" aria-label="Move right">&rarr;</button>
+          <button class="soft-drop" data-control="down" aria-label="Soft drop">&darr;<small>DOWN</small></button>
+          <button class="hold-control" data-control="hold" aria-label="Hold or swap the current piece">HOLD</button>
           <button class="hard-drop" data-control="hard-drop" aria-label="Hard drop">DROP</button>
           <button id="surge-button" class="surge-button" data-control="surge" aria-label="Cast Arcane Surge" disabled>SURGE</button>
         </nav>
