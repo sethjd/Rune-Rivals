@@ -52,7 +52,9 @@ export class GameUI {
       ? "Battle Paused"
       : game.mode === "online" && game.over
         ? "Confirming Result..."
-        : "Rune Duel";
+        : game.mode === "tutorial"
+          ? "Training Duel"
+          : "Rune Duel";
     if (game.mode !== "online") {
       document.querySelector("#target-status").textContent = game.mode === "story"
         ? `STAR GOALS: ${storyObjectiveLabels(game.options.storyLevel).join(" / ").toUpperCase()}`
@@ -215,6 +217,7 @@ export class GameUI {
       ai: "VS KAEL AI",
       story: options.storyLevel ? `STORY · LEVEL ${options.storyLevel.number}` : "STORY DUEL",
       debug: "LOCAL DEBUG DUEL",
+      tutorial: "RUNE ACADEMY",
       online: roomCode ? `ONLINE · ${roomCode}` : "ONLINE DUEL"
     };
     document.querySelector("#mode-label").textContent = labels[mode] ?? "RUNE DUEL";

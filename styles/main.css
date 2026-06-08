@@ -2215,7 +2215,8 @@ h1 span {
   text-transform: uppercase;
 }
 
-#profile-name-input {
+#profile-name-input,
+#onboarding-name-input {
   height: 54px;
   color: #fff1c8;
   font-family: Georgia, serif;
@@ -2223,6 +2224,172 @@ h1 span {
   letter-spacing: 0.04em;
   text-align: left;
   text-transform: none;
+}
+
+.onboarding-screen {
+  overflow-y: auto;
+}
+
+.onboarding-panel {
+  width: min(100%, 780px);
+  max-height: calc(100dvh - 34px);
+  padding: clamp(22px, 4vw, 38px);
+  overflow-y: auto;
+}
+
+.onboarding-panel > .primary-button {
+  width: min(100%, 420px);
+  margin: 20px auto 0;
+}
+
+.tutorial-coach {
+  position: relative;
+  z-index: 16;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  width: min(96vw, 760px);
+  margin: 0 auto 10px;
+  padding: 13px 16px;
+  border: 1px solid rgba(242, 201, 111, 0.62);
+  border-radius: 14px;
+  gap: 10px 18px;
+  background:
+    linear-gradient(135deg, rgba(40, 30, 61, 0.98), rgba(11, 13, 24, 0.98));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42), 0 0 24px rgba(105, 69, 169, 0.2);
+}
+
+.tutorial-coach h3,
+.tutorial-coach p {
+  margin: 0;
+}
+
+.tutorial-coach h3 {
+  margin-top: 2px;
+  color: #ffe39a;
+  font-size: clamp(0.95rem, 2.5vw, 1.2rem);
+}
+
+#tutorial-step-instruction {
+  margin-top: 4px;
+  color: #d5c9df;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.tutorial-progress {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tutorial-progress span {
+  width: 10px;
+  height: 10px;
+  border: 1px solid #766989;
+  border-radius: 50%;
+  background: #211b2e;
+}
+
+.tutorial-progress span.current {
+  border-color: #fff1ad;
+  background: #e0af43;
+  box-shadow: 0 0 12px rgba(255, 217, 112, 0.8);
+}
+
+.tutorial-progress span.done {
+  border-color: #64d6cc;
+  background: #429c91;
+}
+
+.tutorial-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tutorial-actions:has(.text-button.hidden):has(.primary-button.hidden) {
+  display: none;
+}
+
+.tutorial-coach.complete {
+  border-color: #70d5bc;
+  background:
+    linear-gradient(135deg, rgba(24, 67, 65, 0.98), rgba(10, 16, 27, 0.98));
+}
+
+.tutorial-coach.nudge {
+  animation: tutorial-nudge 420ms ease;
+}
+
+@keyframes tutorial-nudge {
+  35% { transform: translateX(-5px); border-color: #ffb96b; }
+  70% { transform: translateX(5px); }
+}
+
+body.tutorial-required #game-screen .game-header > .icon-button,
+body.tutorial-required #game-screen [data-action="pause"] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+body.tutorial-active .enemy-combatant {
+  opacity: 0.72;
+}
+
+body[data-tutorial-step="move"] .move-left,
+body[data-tutorial-step="move"] .move-right,
+body[data-tutorial-step="rotate"] .spin-control,
+body[data-tutorial-step="hold"] [data-control="hold"],
+body[data-tutorial-step="match"] .hard-drop,
+body[data-tutorial-step="surge"] .surge-button {
+  animation: tutorial-control-pulse 760ms ease-in-out infinite alternate;
+  border-color: #ffe28a;
+  box-shadow: 0 0 0 2px rgba(255, 205, 86, 0.25), 0 0 22px rgba(255, 198, 70, 0.55);
+}
+
+body[data-control-layout="swipe"][data-tutorial-step="move"] #player-board,
+body[data-control-layout="swipe"][data-tutorial-step="rotate"] #player-board,
+body[data-control-layout="swipe"][data-tutorial-step="match"] #player-board {
+  animation: tutorial-board-pulse 850ms ease-in-out infinite alternate;
+}
+
+@keyframes tutorial-control-pulse {
+  to { filter: brightness(1.2); box-shadow: 0 0 0 3px rgba(255, 205, 86, 0.3), 0 0 28px rgba(255, 198, 70, 0.68); }
+}
+
+@keyframes tutorial-board-pulse {
+  to { box-shadow: 0 0 0 3px rgba(255, 218, 116, 0.42), 0 0 28px rgba(119, 85, 184, 0.55); }
+}
+
+@media (max-width: 720px) {
+  .onboarding-panel .profile-editor-heading {
+    grid-template-columns: 76px 1fr;
+    margin-top: 16px;
+  }
+
+  .onboarding-panel .profile-editor-heading > img {
+    width: 76px;
+  }
+
+  .onboarding-panel .avatar-grid {
+    grid-template-columns: repeat(5, minmax(48px, 1fr));
+    gap: 7px;
+  }
+
+  .tutorial-coach {
+    grid-template-columns: 1fr;
+    width: min(96vw, 480px);
+    margin-bottom: 7px;
+    padding: 10px 12px;
+    gap: 8px;
+    text-align: center;
+  }
+
+  .tutorial-actions {
+    justify-content: center;
+  }
 }
 
 .avatar-instruction {

@@ -15,6 +15,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - HP, shields, board-overflow penalties, victory, defeat, pause, and rematch
 - AI that scores possible placements and prefers immediate matches
 - Saved player profiles with custom names and 15 original avatars
+- Mandatory first-run mage creation and a five-step playable training duel
 - A five-chapter, 20-level story campaign with rival dialogue, relics, lore, and battle quirks
 - Five equippable Story relics with persistent unlocks and a second loadout slot after the First Vault
 - Adjustable AI pacing and accuracy that ramps through the story

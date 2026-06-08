@@ -18,7 +18,8 @@ export class RuneRivalsGame {
     onMatch,
     onDrop,
     onHold,
-    onSurgeReady
+    onSurgeReady,
+    onAction
   } = {}) {
     this.ui = ui;
     this.onGameOver = onGameOver;
@@ -30,6 +31,7 @@ export class RuneRivalsGame {
     this.onDrop = onDrop;
     this.onHold = onHold;
     this.onSurgeReady = onSurgeReady;
+    this.onAction = onAction;
     this.ai = new RuneAI("normal");
     this.loop = this.loop.bind(this);
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -122,7 +124,7 @@ export class RuneRivalsGame {
       this.lastTime = time;
 
       if (!this.paused && !this.over && !this.resolving) {
-        this.updateFalling("player", delta);
+        if (this.mode !== "tutorial") this.updateFalling("player", delta);
         if (this.mode === "debug") this.updateFalling("enemy", delta);
         if (this.mode === "ai" || this.mode === "story") this.ai.update(delta, this);
 
@@ -182,17 +184,26 @@ export class RuneRivalsGame {
   }
 
   handleAction(action) {
-    if (this.paused || this.over || this.resolving) return;
+    if (!this.running || this.paused || this.over || this.resolving) return false;
     const side = this.mode === "debug" ? this.controlledSide : "player";
-    if (this.mode === "online" && side !== "player") return;
+    if (this.mode === "online" && side !== "player") return false;
 
-    if (action === "left") this.move(side, -1, 0);
-    if (action === "right") this.move(side, 1, 0);
-    if (action === "down" && !this.move(side, 0, 1)) this.lockPiece(side);
-    if (action === "rotate") this.rotate(side);
-    if (action === "hard-drop") this.hardDrop(side);
-    if (action === "hold") this.holdPiece(side);
-    if (action === "surge") this.castSurge();
+    let performed = false;
+    if (action === "left") performed = this.move(side, -1, 0);
+    if (action === "right") performed = this.move(side, 1, 0);
+    if (action === "down") {
+      performed = this.move(side, 0, 1);
+      if (!performed) {
+        this.lockPiece(side);
+        performed = true;
+      }
+    }
+    if (action === "rotate") performed = this.rotate(side);
+    if (action === "hard-drop") performed = this.hardDrop(side);
+    if (action === "hold") performed = this.holdPiece(side);
+    if (action === "surge") performed = this.castSurge();
+    if (performed) this.notifySafely(this.onAction, "action update", action, side);
+    return performed;
   }
 
   move(side, dx, dy) {
@@ -221,10 +232,12 @@ export class RuneRivalsGame {
   }
 
   hardDrop(side) {
+    if (!this.getPiece(side)) return false;
     while (this.move(side, 0, 1)) {
       this.dropTimers[side] = 0;
     }
     this.lockPiece(side);
+    return true;
   }
 
   holdPiece(side = "player") {
@@ -698,6 +711,22 @@ export class RuneRivalsGame {
     if (this.activeRelics.has("roadwardens-mark")) {
       this.player.focus = Math.min(this.player.maxFocus, this.player.focus + 10);
     }
+  }
+
+  prepareTutorialMatch() {
+    if (this.mode !== "tutorial") return false;
+    this.playerBoard.reset();
+    this.playerBoard.grid[12][3] = "fire";
+    this.playerBoard.grid[13][3] = "fire";
+    this.playerPiece = new RunePiece(["fire", "fire"]);
+    this.playerPiece.x = 3;
+    this.playerNext = new RunePiece(["water", "earth"]);
+    this.playerHold = null;
+    this.holdUsed.player = false;
+    this.player.focus = 77;
+    this.dropTimers.player = 0;
+    this.ui.render(this);
+    return true;
   }
 
   getBattleSummary(won = false) {

@@ -38,6 +38,8 @@ export function loadProfile() {
   const fallback = {
     name: "Lyra",
     avatarId: AVATARS[0].id,
+    onboardingComplete: false,
+    tutorialComplete: false,
     unlockedLevel: 1,
     completedLevels: [],
     storyStars: {},
@@ -55,9 +57,12 @@ export function loadProfile() {
 
   try {
     const stored = JSON.parse(localStorage.getItem(PROFILE_KEY));
+    const returningPlayer = Boolean(stored);
     const migrated = {
       ...fallback,
       ...stored,
+      onboardingComplete: stored?.onboardingComplete ?? returningPlayer,
+      tutorialComplete: stored?.tutorialComplete ?? returningPlayer,
       completedLevels: Array.isArray(stored?.completedLevels) ? stored.completedLevels : [],
       storyStars: stored?.storyStars && typeof stored.storyStars === "object" ? stored.storyStars : {},
       controlLayout: normalizeControlLayout(stored?.controlLayout)
@@ -77,6 +82,8 @@ export function saveProfile(profile) {
   const prepared = {
     ...profile,
     name: String(profile.name || "Player").trim().slice(0, 16) || "Player",
+    onboardingComplete: Boolean(profile.onboardingComplete),
+    tutorialComplete: Boolean(profile.tutorialComplete),
     controlLayout: normalizeControlLayout(profile.controlLayout)
   };
   prepared.unlockedRelics = unlockedRelicIds(prepared.completedLevels, prepared.unlockedRelics);

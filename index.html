@@ -228,6 +228,25 @@
         </div>
       </section>
 
+      <section id="onboarding-screen" class="screen panel-screen onboarding-screen" aria-labelledby="onboarding-title">
+        <div class="panel onboarding-panel">
+          <p class="eyebrow">Welcome to Rune Rivals</p>
+          <h2 id="onboarding-title">Create Your Rune Mage</h2>
+          <p class="panel-intro">Choose the name and face other players will see. Your first training duel begins next.</p>
+          <div class="profile-editor-heading">
+            <img id="onboarding-preview" alt="Selected avatar">
+            <label for="onboarding-name-input">
+              Mage name
+              <input id="onboarding-name-input" maxlength="16" autocomplete="nickname" placeholder="Enter your name">
+            </label>
+          </div>
+          <p class="avatar-instruction">Choose your avatar</p>
+          <div id="onboarding-avatar-grid" class="avatar-grid" role="radiogroup" aria-label="Choose your first avatar"></div>
+          <p id="onboarding-message" class="form-message" aria-live="polite"></p>
+          <button class="primary-button" data-action="begin-tutorial">Create Mage and Begin Training</button>
+        </div>
+      </section>
+
       <section id="story-screen" class="screen story-screen" aria-labelledby="story-title">
         <header class="story-header">
           <button class="icon-button" data-action="back-menu" aria-label="Return to menu">&times;</button>
@@ -348,7 +367,8 @@
           </div>
           <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, C holds a piece, S casts Arcane Surge, and P pauses.</p>
             <p><b>Touch:</b> choose Classic, Swipe, Left-handed, or Bigger buttons in your profile. In Swipe mode, tap your board to spin, swipe sideways to move, swipe down to soft drop, and flick down to hard drop. Hold and Surge stay as buttons.</p>
-            <p><b>Story relics:</b> complete marked levels to earn permanent powers. Equip one relic at first; completing the First Vault unlocks a second slot.</p>
+          <p><b>Story relics:</b> complete marked levels to earn permanent powers. Equip one relic at first; completing the First Vault unlocks a second slot.</p>
+          <button class="primary-button" data-action="start-tutorial">Play Training Tutorial</button>
           <button class="primary-button" data-action="back-menu">Got it</button>
         </div>
       </section>
@@ -367,6 +387,18 @@
           </div>
         </header>
         <div id="active-relics" class="active-relics hidden" aria-label="Equipped story relics"></div>
+        <aside id="tutorial-coach" class="tutorial-coach hidden" aria-live="polite">
+          <div>
+            <p id="tutorial-step-label" class="eyebrow">Training 1 of 5</p>
+            <h3 id="tutorial-step-title">Move the falling runes</h3>
+            <p id="tutorial-step-instruction"></p>
+          </div>
+          <div id="tutorial-progress" class="tutorial-progress" aria-label="Tutorial progress"></div>
+          <div class="tutorial-actions">
+            <button class="text-button" data-action="exit-tutorial">Exit Training</button>
+            <button class="primary-button hidden" data-action="finish-tutorial">Enter Rune Rivals</button>
+          </div>
+        </aside>
         <div id="danger-alert" class="danger-alert" aria-live="polite">BOARD BREACH RISK</div>
 
         <div class="arena">

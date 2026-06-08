@@ -40,6 +40,7 @@ import {
   storyObjectiveLabels,
   storyRatingFor
 } from "./story.js";
+import { TutorialController } from "./tutorial.js";
 import { GameUI } from "./ui.js";
 
 const ui = new GameUI();
@@ -56,6 +57,8 @@ let selectedCodexId = "fire";
 let publicLobbyLoadToken = 0;
 let publicLobbyRefreshTimer = null;
 let selectedControlLayout = normalizeControlLayout(profile.controlLayout);
+let onboardingAvatarId = "";
+let tutorial;
 
 const game = new RuneRivalsGame(ui, {
   onGameOver: (won, summary) => handleGameOver(won, summary),
@@ -69,15 +72,34 @@ const game = new RuneRivalsGame(ui, {
     console.warn("Attack sync paused:", error);
   }),
   onSpell: (_side, result) => audio.playSpell(result.type),
-  onMatch: (combo) => audio.playMatch(combo),
+  onMatch: (combo, groups) => {
+    audio.playMatch(combo);
+    tutorial?.handleMatch(groups);
+  },
   onDrop: () => audio.playDrop(),
   onHold: () => audio.playHold(),
-  onSurgeReady: () => audio.playSurgeReady()
+  onSurgeReady: () => audio.playSurgeReady(),
+  onAction: (action) => tutorial?.handleAction(action)
+});
+
+tutorial = new TutorialController(game, {
+  onComplete: () => {
+    profile = saveProfile({
+      ...profile,
+      onboardingComplete: true,
+      tutorialComplete: true
+    });
+    renderMenuProfile();
+  }
 });
 
 const input = new InputController(
   (action) => {
     audio.activate();
+    if (tutorial.active && !tutorial.allowsAction(action)) {
+      tutorial.remind();
+      return;
+    }
     if (action === "left" || action === "right" || action === "rotate" || action === "down") audio.playMove();
     game.handleAction(action);
   },
@@ -87,6 +109,13 @@ const input = new InputController(
 input.setLayout(selectedControlLayout);
 
 document.addEventListener("click", async (event) => {
+  const onboardingAvatarButton = event.target.closest("[data-onboarding-avatar]");
+  if (onboardingAvatarButton) {
+    selectOnboardingAvatar(onboardingAvatarButton.dataset.onboardingAvatar);
+    audio.playMove();
+    return;
+  }
+
   const avatarButton = event.target.closest("[data-avatar]");
   if (avatarButton) {
     selectAvatar(avatarButton.dataset.avatar);
@@ -153,6 +182,15 @@ document.addEventListener("click", async (event) => {
   });
   const action = button.dataset.action;
 
+  if (
+    tutorial.active &&
+    tutorial.required &&
+    (action === "back-menu" || action === "confirm-exit" || action === "exit-tutorial")
+  ) {
+    tutorial.remind();
+    return;
+  }
+
   if (action === "show-duel") {
     audio.setMusicScene("duel");
     ui.showScreen("duel-screen");
@@ -165,6 +203,10 @@ document.addEventListener("click", async (event) => {
   if (action === "next-story-level") startStoryLevel(Math.min(STORY_LEVELS.length, selectedStoryLevel.number + 1));
   if (action === "show-profile") showProfile();
   if (action === "save-profile") saveProfileFromForm();
+  if (action === "begin-tutorial") beginRequiredTutorial();
+  if (action === "start-tutorial") startTutorial(false);
+  if (action === "finish-tutorial") finishTutorial();
+  if (action === "exit-tutorial") exitTutorial();
   if (action === "toggle-audio") {
     audio.toggle();
     updateAudioButtons();
@@ -201,6 +243,11 @@ document.querySelector("#room-code-input").addEventListener("input", (event) => 
 
 document.querySelector("#profile-name-input").addEventListener("input", (event) => {
   event.target.value = event.target.value.replace(/[^\p{L}\p{N} _'-]/gu, "").slice(0, 16);
+});
+
+document.querySelector("#onboarding-name-input").addEventListener("input", (event) => {
+  event.target.value = event.target.value.replace(/[^\p{L}\p{N} _'-]/gu, "").slice(0, 16);
+  document.querySelector("#onboarding-message").textContent = "";
 });
 
 function startGame(mode, roomCode = "", options = {}) {
@@ -263,6 +310,93 @@ function startQuickDuel(difficulty = "normal") {
     ...tier,
     opponentAvatar: "./assets/portraits/kael.svg"
   });
+}
+
+function showRequiredOnboarding() {
+  onboardingAvatarId = "";
+  document.querySelector("#onboarding-name-input").value = "";
+  document.querySelector("#onboarding-message").textContent = "";
+  document.querySelector("#onboarding-preview").src = avatarDataUri(AVATARS[0].id);
+  renderOnboardingAvatarGrid();
+  audio.setMusicScene("menu");
+  ui.showScreen("onboarding-screen");
+}
+
+function renderOnboardingAvatarGrid() {
+  document.querySelector("#onboarding-avatar-grid").innerHTML = AVATARS.map((avatar) => `
+    <button class="avatar-choice ${avatar.id === onboardingAvatarId ? "selected" : ""}"
+      data-onboarding-avatar="${avatar.id}" role="radio"
+      aria-checked="${avatar.id === onboardingAvatarId}" title="${avatar.name}">
+      <img src="${avatarDataUri(avatar.id)}" alt="${avatar.name}">
+    </button>
+  `).join("");
+}
+
+function selectOnboardingAvatar(avatarId) {
+  onboardingAvatarId = avatarId;
+  document.querySelector("#onboarding-message").textContent = "";
+  document.querySelector("#onboarding-preview").src = avatarDataUri(avatarId);
+  for (const button of document.querySelectorAll("[data-onboarding-avatar]")) {
+    const selected = button.dataset.onboardingAvatar === avatarId;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  }
+}
+
+function beginRequiredTutorial() {
+  const name = document.querySelector("#onboarding-name-input").value.trim();
+  const message = document.querySelector("#onboarding-message");
+  if (!name) {
+    message.textContent = "Enter your mage name.";
+    return;
+  }
+  if (!onboardingAvatarId) {
+    message.textContent = "Choose an avatar for your mage.";
+    return;
+  }
+  profile = saveProfile({
+    ...profile,
+    name,
+    avatarId: onboardingAvatarId,
+    onboardingComplete: true,
+    tutorialComplete: false
+  });
+  selectedAvatarId = profile.avatarId;
+  renderMenuProfile();
+  startTutorial(true);
+}
+
+function startTutorial(required = false) {
+  stopPublicLobbyRefresh();
+  multiplayer.leave();
+  game.stop();
+  lastMode = "tutorial";
+  lastRoomCode = "";
+  lastStartOptions = {};
+  audio.setPaused(false);
+  audio.setMusicScene("duel");
+  game.start("tutorial", "", {
+    playerName: profile.name,
+    playerAvatar: avatarDataUri(profile.avatarId),
+    opponentName: "TRAINING WARDEN",
+    opponentAvatar: "./assets/portraits/kael.svg",
+    rules: { enemyHp: 100 }
+  });
+  tutorial.start({ required });
+}
+
+function finishTutorial() {
+  tutorial.stop();
+  returnToMenu();
+}
+
+function exitTutorial() {
+  if (tutorial.required) {
+    tutorial.remind();
+    return;
+  }
+  tutorial.stop();
+  returnToMenu();
 }
 
 function handleGameOver(won, summary = game.getBattleSummary(won)) {
@@ -365,7 +499,7 @@ function updateProfilePreview() {
 }
 
 function renderControlLayoutOptions() {
-  for (const button of document.querySelectorAll("[data-control-layout]")) {
+  for (const button of document.querySelectorAll("button[data-control-layout]")) {
     const selected = button.dataset.controlLayout === selectedControlLayout;
     button.classList.toggle("selected", selected);
     button.setAttribute("aria-checked", String(selected));
@@ -1034,6 +1168,7 @@ function returnToMenu() {
   publicLobbyLoadToken += 1;
   stopPublicLobbyRefresh();
   game.stop();
+  tutorial.stop();
   multiplayer.leave();
   renderMenuProfile();
   audio.setPaused(false);
@@ -1098,7 +1233,14 @@ if (!multiplayer.configured) {
 
 renderMenuProfile();
 renderAvatarGrid();
+renderOnboardingAvatarGrid();
 renderStoryMap();
 selectStoryLevel(selectedStoryLevel.number);
 updateAudioButtons();
 registerPWA();
+
+if (!profile.onboardingComplete) {
+  showRequiredOnboarding();
+} else if (!profile.tutorialComplete) {
+  startTutorial(true);
+}
