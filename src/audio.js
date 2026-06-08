@@ -2,6 +2,28 @@ const AUDIO_KEY = "rune-rivals-audio-muted";
 const MUSIC_LOOKAHEAD_MS = 70;
 const MUSIC_SCHEDULE_AHEAD = 0.32;
 const MUSIC_FADE_SECONDS = 0.24;
+const AUDIO_MIX = Object.freeze({
+  master: 0.4,
+  effects: 0.58,
+  reverb: 0.12,
+  pausedMusic: 0.075,
+  ambientMusic: 0.27,
+  battleMusic: 0.34,
+  resultMusic: 0.23
+});
+
+const EFFECT_LEVELS = Object.freeze({
+  move: 0.02,
+  drop: 0.072,
+  holdLow: 0.052,
+  holdHigh: 0.038,
+  surgeSweep: 0.052,
+  surgeBell: 0.066,
+  match: 0.075,
+  spell: 0.13,
+  victory: 0.105,
+  defeat: 0.078
+});
 
 const CHAPTER_THEMES = {
   1: {
@@ -22,6 +44,7 @@ const CHAPTER_THEMES = {
     leadWave: "sine",
     arpWave: "triangle",
     filter: 1800,
+    outputGain: 1,
     battleTempo: 1.08,
     drumStyle: "march"
   },
@@ -43,6 +66,7 @@ const CHAPTER_THEMES = {
     leadWave: "triangle",
     arpWave: "sine",
     filter: 1250,
+    outputGain: 1.14,
     battleTempo: 1.12,
     drumStyle: "tide"
   },
@@ -64,6 +88,7 @@ const CHAPTER_THEMES = {
     leadWave: "square",
     arpWave: "sawtooth",
     filter: 2450,
+    outputGain: 0.92,
     battleTempo: 1.12,
     drumStyle: "storm"
   },
@@ -85,6 +110,7 @@ const CHAPTER_THEMES = {
     leadWave: "sawtooth",
     arpWave: "triangle",
     filter: 2050,
+    outputGain: 0.98,
     battleTempo: 1.14,
     drumStyle: "ritual"
   },
@@ -106,6 +132,7 @@ const CHAPTER_THEMES = {
     leadWave: "triangle",
     arpWave: "square",
     filter: 1550,
+    outputGain: 1.1,
     battleTempo: 1.16,
     drumStyle: "rift"
   }
@@ -130,6 +157,7 @@ const GENERAL_THEMES = {
     leadWave: "sine",
     arpWave: "sine",
     filter: 1650,
+    outputGain: 1.06,
     battleTempo: 1.08,
     drumStyle: "march"
   },
@@ -151,6 +179,7 @@ const GENERAL_THEMES = {
     leadWave: "square",
     arpWave: "triangle",
     filter: 2200,
+    outputGain: 0.97,
     battleTempo: 1.08,
     drumStyle: "march"
   },
@@ -172,6 +201,7 @@ const GENERAL_THEMES = {
     leadWave: "triangle",
     arpWave: "square",
     filter: 2350,
+    outputGain: 0.93,
     battleTempo: 1.08,
     drumStyle: "storm"
   }
@@ -208,23 +238,30 @@ export class AudioManager {
     this.context = new AudioContextClass();
 
     this.master = this.context.createGain();
-    this.master.gain.value = 0.34;
+    this.master.gain.value = AUDIO_MIX.master;
 
     this.compressor = this.context.createDynamicsCompressor();
-    this.compressor.threshold.value = -18;
-    this.compressor.knee.value = 18;
-    this.compressor.ratio.value = 5;
-    this.compressor.attack.value = 0.008;
-    this.compressor.release.value = 0.2;
+    this.compressor.threshold.value = -6;
+    this.compressor.knee.value = 4;
+    this.compressor.ratio.value = 10;
+    this.compressor.attack.value = 0.003;
+    this.compressor.release.value = 0.12;
 
     this.sfxBus = this.context.createGain();
-    this.sfxBus.gain.value = 0.9;
-    this.sfxBus.connect(this.master);
+    this.sfxBus.gain.value = AUDIO_MIX.effects;
+    this.sfxCompressor = this.context.createDynamicsCompressor();
+    this.sfxCompressor.threshold.value = -16;
+    this.sfxCompressor.knee.value = 10;
+    this.sfxCompressor.ratio.value = 3.5;
+    this.sfxCompressor.attack.value = 0.003;
+    this.sfxCompressor.release.value = 0.14;
+    this.sfxBus.connect(this.sfxCompressor);
+    this.sfxCompressor.connect(this.master);
 
     this.reverb = this.context.createConvolver();
     this.reverb.buffer = this.createReverbImpulse(1.8, 2.8);
     this.reverbGain = this.context.createGain();
-    this.reverbGain.gain.value = 0.16;
+    this.reverbGain.gain.value = AUDIO_MIX.reverb;
     this.reverb.connect(this.reverbGain);
     this.reverbGain.connect(this.master);
 
@@ -237,7 +274,11 @@ export class AudioManager {
     this.muted = !this.muted;
     localStorage.setItem(AUDIO_KEY, String(this.muted));
     if (this.master && this.context) {
-      this.master.gain.setTargetAtTime(this.muted ? 0.0001 : 0.34, this.context.currentTime, 0.03);
+      this.master.gain.setTargetAtTime(
+        this.muted ? 0.0001 : AUDIO_MIX.master,
+        this.context.currentTime,
+        0.03
+      );
     }
     if (this.muted) this.stopMusic();
     else this.activate();
@@ -255,7 +296,7 @@ export class AudioManager {
   setPaused(paused) {
     this.paused = Boolean(paused);
     if (!this.musicBus || !this.context) return;
-    const target = this.paused ? 0.055 : this.musicVolumeForScene();
+    const target = this.paused ? AUDIO_MIX.pausedMusic : this.musicVolumeForScene();
     this.musicBus.gain.setTargetAtTime(target, this.context.currentTime, 0.08);
   }
 
@@ -266,9 +307,14 @@ export class AudioManager {
 
   resolveMusic() {
     const storyScene = this.scene.startsWith("story");
+    const generalScene = this.scene === "online-battle"
+      ? "online"
+      : this.scene === "result"
+        ? "duel"
+        : this.scene;
     const theme = storyScene
       ? CHAPTER_THEMES[this.chapter] ?? CHAPTER_THEMES[1]
-      : GENERAL_THEMES[this.scene] ?? GENERAL_THEMES.menu;
+      : GENERAL_THEMES[generalScene] ?? GENERAL_THEMES.menu;
     let variant = "ambient";
     if (this.scene === "duel" || this.scene === "online-battle" || this.scene === "story-battle") {
       variant = "battle";
@@ -303,7 +349,7 @@ export class AudioManager {
     this.musicBus = this.context.createGain();
     this.musicBus.gain.setValueAtTime(0.0001, now);
     this.musicBus.gain.exponentialRampToValueAtTime(
-      Math.max(0.0001, this.paused ? 0.055 : this.musicVolumeForScene()),
+      Math.max(0.0001, this.paused ? AUDIO_MIX.pausedMusic : this.musicVolumeForScene()),
       now + MUSIC_FADE_SECONDS
     );
     this.musicBus.connect(this.master);
@@ -343,10 +389,13 @@ export class AudioManager {
   }
 
   musicVolumeForScene() {
-    const { variant } = this.resolveMusic();
-    if (variant === "battle") return 0.2;
-    if (variant === "result") return 0.12;
-    return 0.145;
+    const { theme, variant } = this.resolveMusic();
+    const sceneLevel = variant === "battle"
+      ? AUDIO_MIX.battleMusic
+      : variant === "result"
+        ? AUDIO_MIX.resultMusic
+        : AUDIO_MIX.ambientMusic;
+    return sceneLevel * (theme.outputGain ?? 1);
   }
 
   scheduleMusic(generation) {
@@ -569,31 +618,38 @@ export class AudioManager {
   }
 
   playMove() {
-    this.tone(180, 0.035, "square", 0.025, 80);
+    this.tone(180, 0.035, "square", EFFECT_LEVELS.move, 80);
   }
 
   playDrop() {
-    this.tone(120, 0.12, "triangle", 0.1, -55);
+    this.tone(120, 0.12, "triangle", EFFECT_LEVELS.drop, -55);
   }
 
   playHold() {
-    this.tone(260, 0.12, "sine", 0.07, 180);
-    globalThis.setTimeout(() => this.tone(440, 0.1, "triangle", 0.05, -80), 55);
+    this.tone(260, 0.12, "sine", EFFECT_LEVELS.holdLow, 180);
+    globalThis.setTimeout(() => {
+      this.tone(440, 0.1, "triangle", EFFECT_LEVELS.holdHigh, -80);
+    }, 55);
   }
 
   playSurgeReady() {
     if (this.muted || !this.context) return;
     const now = this.context.currentTime;
-    this.toneAt(196, now, 0.42, "sine", 0.065, 390);
+    this.toneAt(196, now, 0.42, "sine", EFFECT_LEVELS.surgeSweep, 390);
     [392, 523.25, 659.25, 783.99].forEach((frequency, index) => {
-      this.bellAt(frequency, now + 0.08 + index * 0.075, 0.72, 0.09 - index * 0.009);
+      this.bellAt(
+        frequency,
+        now + 0.08 + index * 0.075,
+        0.72,
+        EFFECT_LEVELS.surgeBell - index * 0.006
+      );
     });
   }
 
   playMatch(combo = 1) {
     const root = 330 * Math.min(1.5, 1 + (combo - 1) * 0.15);
     [root, root * 1.25, root * 1.5].forEach((frequency, index) => {
-      globalThis.setTimeout(() => this.piano(frequency, 0.5, 0.11), index * 55);
+      globalThis.setTimeout(() => this.piano(frequency, 0.5, EFFECT_LEVELS.match), index * 55);
     });
   }
 
@@ -609,18 +665,18 @@ export class AudioManager {
     };
     const [start, sweep] = sounds[type] ?? sounds.fire;
     const wave = type === "lightning" ? "sawtooth" : type === "water" || type === "air" ? "sine" : "triangle";
-    this.tone(start, 0.34, wave, 0.18, sweep);
+    this.tone(start, 0.34, wave, EFFECT_LEVELS.spell, sweep);
   }
 
   playVictory() {
     [261.63, 329.63, 392, 523.25].forEach((frequency, index) => {
-      globalThis.setTimeout(() => this.piano(frequency, 1.2, 0.15), index * 130);
+      globalThis.setTimeout(() => this.piano(frequency, 1.2, EFFECT_LEVELS.victory), index * 130);
     });
   }
 
   playDefeat() {
     [293.66, 246.94, 196, 146.83].forEach((frequency, index) => {
-      globalThis.setTimeout(() => this.piano(frequency, 1, 0.1), index * 150);
+      globalThis.setTimeout(() => this.piano(frequency, 1, EFFECT_LEVELS.defeat), index * 150);
     });
   }
 
