@@ -44,7 +44,13 @@ export class RuneRivalsGame {
     this.enemyBoard = new RuneBoard();
     this.player = createFighter(options.playerName ?? "YOU");
     this.enemy = createFighter(options.opponentName ?? (mode === "ai" ? "KAEL AI" : "RIVAL"));
+    this.activeRelics = new Set(mode === "story" ? options.relicIds ?? [] : []);
+    this.relicState = {
+      stormThreadUsed: false,
+      mirrorRuneUsed: false
+    };
     this.applyBattleRules(options.rules ?? {});
+    this.applyRelicStartEffects();
     this.playerPiece = new RunePiece();
     this.playerNext = new RunePiece();
     this.playerHold = null;
@@ -404,6 +410,12 @@ export class RuneRivalsGame {
     const casterBoard = this.getBoard(side);
     const targetBoard = this.getBoard(this.otherSide(side));
     const targetHpBefore = target.hp;
+    const blockJunk = (
+      side === "enemy" &&
+      this.activeRelics.has("mirror-rune") &&
+      !this.relicState.mirrorRuneUsed &&
+      (type === "lightning" || type === "shadow")
+    );
     const result = castSpell(
       type,
       combo,
@@ -412,9 +424,42 @@ export class RuneRivalsGame {
       casterBoard,
       targetBoard,
       matchSize,
-      this.spellPowerFor(side, type)
+      this.spellPowerFor(side, type),
+      { blockJunk }
     );
+
+    if (side === "player" && type === "fire" && this.activeRelics.has("ashglass-charm")) {
+      applyDamage(target, 2);
+      if (result.attack) result.attack.amount = Number(result.attack.amount ?? 0) + 2;
+      result.relicBonus = "Ashglass Charm";
+    }
+    if (side === "player" && type === "earth" && this.activeRelics.has("rootguard-token")) {
+      const bonusShield = Math.max(1, Math.round(Number(result.amount ?? 0) * 0.25));
+      caster.shield += bonusShield;
+      result.amount = Number(result.amount ?? 0) + bonusShield;
+      result.relicBonus = "Rootguard Token";
+    }
+    if (
+      side === "player" &&
+      type === "lightning" &&
+      this.activeRelics.has("storm-thread") &&
+      !this.relicState.stormThreadUsed
+    ) {
+      this.relicState.stormThreadUsed = true;
+      if (result.attack) result.attack.junk = Number(result.attack.junk ?? 0) + 1;
+      result.overflowed = targetBoard.addJunk(1) || result.overflowed;
+      result.relicBonus = "Storm Thread";
+    }
+    if (result.junkBlocked) {
+      this.relicState.mirrorRuneUsed = true;
+      result.relicBonus = "Mirror Rune";
+      this.ui.showRelic?.("Mirror Rune blocked incoming junk.");
+    }
+
     this.ui.showSpell(side, result);
+    if (result.relicBonus && !result.junkBlocked) {
+      this.ui.showRelic?.(`${result.relicBonus} activated.`);
+    }
     this.notifySafely(this.onSpell, "spell sound", side, result);
     const damage = Math.max(0, targetHpBefore - target.hp);
     if (damage) this.ui.showDamage?.(this.otherSide(side), damage, type);
@@ -647,6 +692,12 @@ export class RuneRivalsGame {
     this.enemy.shield = rules.enemyShield ?? 0;
     if (rules.playerJunk) this.playerBoard.addJunk(rules.playerJunk);
     if (rules.enemyJunk) this.enemyBoard.addJunk(rules.enemyJunk);
+  }
+
+  applyRelicStartEffects() {
+    if (this.activeRelics.has("roadwardens-mark")) {
+      this.player.focus = Math.min(this.player.maxFocus, this.player.focus + 10);
+    }
   }
 
   getBattleSummary(won = false) {

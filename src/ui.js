@@ -1,4 +1,5 @@
 import { BOARD_HEIGHT, BOARD_WIDTH, RUNE_DATA } from "./constants.js";
+import { getRelic } from "./relics.js";
 import { storyObjectiveLabels } from "./story.js";
 
 export class GameUI {
@@ -12,6 +13,7 @@ export class GameUI {
     this.battleEffect = document.querySelector("#battle-effect");
     this.battleEffectImage = document.querySelector("#battle-effect-image");
     this.combatFloatLayer = document.querySelector("#combat-float-layer");
+    this.relicBanner = document.querySelector("#relic-banner");
     this.pauseOverlay = document.querySelector("#pause-overlay");
     this.makeBoardCells(this.playerBoard);
     this.makeBoardCells(this.enemyBoard);
@@ -189,6 +191,25 @@ export class GameUI {
     window.setTimeout(() => element.remove(), 1050);
   }
 
+  showRelic(message) {
+    if (!this.relicBanner) return;
+    this.relicBanner.textContent = message;
+    this.relicBanner.classList.remove("visible");
+    void this.relicBanner.offsetWidth;
+    this.relicBanner.classList.add("visible");
+    window.setTimeout(() => this.relicBanner.classList.remove("visible"), 1500);
+  }
+
+  showEmote(side, text, senderName = "") {
+    const element = document.querySelector(side === "player" ? "#player-emote" : "#enemy-emote");
+    if (!element) return;
+    element.textContent = senderName ? `${senderName}: ${text}` : text;
+    element.classList.remove("visible");
+    void element.offsetWidth;
+    element.classList.add("visible");
+    window.setTimeout(() => element.classList.remove("visible"), 2600);
+  }
+
   setMode(mode, roomCode = "", options = {}) {
     const labels = {
       ai: "VS KAEL AI",
@@ -201,6 +222,17 @@ export class GameUI {
     document.querySelector("#enemy-name").textContent = options.opponentName ?? (mode === "ai" ? "KAEL AI" : "RIVAL");
     if (options.playerAvatar) document.querySelector(".portrait-player img").src = options.playerAvatar;
     if (options.opponentAvatar) document.querySelector("#enemy-portrait").src = options.opponentAvatar;
+    const relicBar = document.querySelector("#active-relics");
+    const relics = mode === "story"
+      ? (options.relicIds ?? []).map(getRelic).filter(Boolean)
+      : [];
+    relicBar.classList.toggle("hidden", !relics.length);
+    relicBar.innerHTML = relics.map((relic) => (
+      `<span title="${relic.description}"><img src="${relic.icon}" alt="">${relic.name}</span>`
+    )).join("");
+    document.querySelector("#online-emotes").classList.toggle("hidden", mode !== "online");
+    document.querySelector("#player-emote").classList.remove("visible");
+    document.querySelector("#enemy-emote").classList.remove("visible");
   }
 
   updateOnlineTarget({ name, avatar, aliveCount, totalPlayers }) {

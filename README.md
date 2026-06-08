@@ -16,6 +16,7 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - AI that scores possible placements and prefers immediate matches
 - Saved player profiles with custom names and 15 original avatars
 - A five-chapter, 20-level story campaign with rival dialogue, relics, lore, and battle quirks
+- Five equippable Story relics with persistent unlocks and a second loadout slot after the First Vault
 - Adjustable AI pacing and accuracy that ramps through the story
 - Original adaptive soundtrack with distinct map and battle arrangements for all five story chapters
 - Layered synthesized pads, bass, melody, arpeggios, percussion, reverb, and elemental attack sounds
@@ -38,6 +39,8 @@ This repository contains a playable prototype designed for GitHub Pages and inst
 - Premium painted arena art, danger warnings, damage numbers, and a refined battle HUD
 - Responsive desktop, portrait-phone, and landscape-phone layouts
 - Keyboard controls and a centered two-row mobile control deck with Hold
+- Classic, swipe, left-handed, and larger-button mobile control layouts
+- Four preset online battle emotes with automatic cleanup
 - PWA manifest, service worker, offline app shell, and original icons
 - Original SVG rune, interface, arena, and spell artwork
 
@@ -65,6 +68,8 @@ Other static servers work too, including the VS Code Live Server extension.
 | Hard drop | Space | Drop button |
 | Hold / swap | C | Hold button |
 | Pause | P | Top-right pause button |
+
+Mobile players can select Classic buttons, Swipe mode, Left-handed mode, or Bigger buttons in the profile screen. Swipe mode uses tap to rotate, horizontal swipes to move, a downward swipe to soft drop, and a quick downward flick to hard drop; Hold and Surge remain visible buttons.
 
 ## Enable Firebase Multiplayer
 
@@ -123,6 +128,7 @@ src/
   ai.js
   board.js
   constants.js
+  emotes.js
   firebase-config.js
   game.js
   input.js
@@ -132,6 +138,7 @@ src/
   pieces.js
   pwa.js
   profile.js
+  relics.js
   story.js
   audio.js
   spells.js
@@ -164,7 +171,7 @@ assets/
 
 1. Add anonymous Firebase Authentication and strict per-player database rules.
 2. Add room expiry and reconnection support.
-3. Add animated story dialogue scenes and mechanical relic rewards.
+3. Add animated story dialogue scenes and more relic combinations.
 4. Add a short interactive tutorial and colour-blind rune patterns.
 5. Add separate music/effects sliders, haptics settings, and richer spell animation.
 6. Add online rematches, player display names, and match statistics.

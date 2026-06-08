@@ -8,6 +8,7 @@ import {
 } from "./codex.js";
 import { RuneRivalsGame } from "./game.js";
 import { InputController } from "./input.js";
+import { getOnlineEmote } from "./emotes.js";
 import { LeaderboardClient, leagueTier } from "./leaderboard.js";
 import { MultiplayerClient } from "./multiplayer.js";
 import { registerPWA } from "./pwa.js";
@@ -19,10 +20,18 @@ import {
   mageLevel,
   mageRank,
   masteryProgress,
+  normalizeControlLayout,
   recordBattle,
   saveProfile,
   totalStoryStars
 } from "./profile.js";
+import {
+  getRelic,
+  RELICS,
+  relicForLevel,
+  relicSlotCount,
+  toggleEquippedRelic
+} from "./relics.js";
 import {
   getStoryChapter,
   getStoryLevel,
@@ -46,6 +55,7 @@ let lastStartOptions = {};
 let selectedCodexId = "fire";
 let publicLobbyLoadToken = 0;
 let publicLobbyRefreshTimer = null;
+let selectedControlLayout = normalizeControlLayout(profile.controlLayout);
 
 const game = new RuneRivalsGame(ui, {
   onGameOver: (won, summary) => handleGameOver(won, summary),
@@ -65,7 +75,7 @@ const game = new RuneRivalsGame(ui, {
   onSurgeReady: () => audio.playSurgeReady()
 });
 
-new InputController(
+const input = new InputController(
   (action) => {
     audio.activate();
     if (action === "left" || action === "right" || action === "rotate" || action === "down") audio.playMove();
@@ -74,6 +84,7 @@ new InputController(
   () => toggleGamePause(),
   () => game.swapDebugSide()
 );
+input.setLayout(selectedControlLayout);
 
 document.addEventListener("click", async (event) => {
   const avatarButton = event.target.closest("[data-avatar]");
@@ -87,6 +98,36 @@ document.addEventListener("click", async (event) => {
   if (levelButton && !levelButton.disabled) {
     selectStoryLevel(Number(levelButton.dataset.level));
     audio.playMove();
+    return;
+  }
+
+  const relicButton = event.target.closest("[data-relic]");
+  if (relicButton && !relicButton.disabled) {
+    profile = saveProfile(toggleEquippedRelic(profile, relicButton.dataset.relic));
+    renderRelicLoadout();
+    audio.playMove();
+    return;
+  }
+
+  const controlLayoutButton = event.target.closest("button[data-control-layout]");
+  if (controlLayoutButton) {
+    selectedControlLayout = normalizeControlLayout(controlLayoutButton.dataset.controlLayout);
+    profile = saveProfile({ ...profile, controlLayout: selectedControlLayout });
+    input.setLayout(selectedControlLayout);
+    renderControlLayoutOptions();
+    audio.playMove();
+    return;
+  }
+
+  const emoteButton = event.target.closest("[data-emote]");
+  if (emoteButton) {
+    const emote = getOnlineEmote(emoteButton.dataset.emote);
+    if (emote && lastMode === "online" && game.running && !game.over) {
+      ui.showEmote("player", emote.text);
+      multiplayer.sendEmote(emote.id).catch((error) => {
+        console.warn("Emote delivery paused:", error);
+      });
+    }
     return;
   }
 
@@ -107,7 +148,9 @@ document.addEventListener("click", async (event) => {
 
   const button = event.target.closest("[data-action]");
   if (!button) return;
-  await audio.activate();
+  audio.activate().catch((error) => {
+    console.warn("Audio activation paused:", error);
+  });
   const action = button.dataset.action;
 
   if (action === "show-duel") {
@@ -184,6 +227,7 @@ function startStoryLevel(levelNumber) {
   selectedStoryLevel = level;
   startGame("story", "", {
     storyLevel: level,
+    relicIds: profile.equippedRelics,
     opponentName: level.opponent,
     opponentAvatar: avatarDataUri(level.avatarId),
     rules: level.rules
@@ -240,7 +284,11 @@ function handleGameOver(won, summary = game.getBattleSummary(won)) {
       profile = completeStoryLevel(profile, selectedStoryLevel.number, stars);
       renderMenuProfile();
       renderStoryMap();
-      message = `${selectedStoryLevel.victory} Relic recovered: ${selectedStoryLevel.reward}.`;
+      renderRelicLoadout();
+      const unlockedRelic = relicForLevel(selectedStoryLevel.number);
+      message = unlockedRelic
+        ? `${selectedStoryLevel.victory} Relic unlocked: ${unlockedRelic.name}. ${unlockedRelic.description}`
+        : `${selectedStoryLevel.victory} Reward recovered: ${selectedStoryLevel.reward}.`;
     } else {
       message = selectedStoryLevel.defeat;
     }
@@ -264,9 +312,11 @@ function handleGameOver(won, summary = game.getBattleSummary(won)) {
 function showProfile() {
   audio.setMusicScene("menu");
   selectedAvatarId = profile.avatarId;
+  selectedControlLayout = normalizeControlLayout(profile.controlLayout);
   document.querySelector("#profile-name-input").value = profile.name;
   document.querySelector("#profile-message").textContent = "";
   renderAvatarGrid();
+  renderControlLayoutOptions();
   updateProfilePreview();
   ui.showScreen("profile-screen");
 }
@@ -287,7 +337,13 @@ function saveProfileFromForm() {
     document.querySelector("#profile-message").textContent = "Enter a mage name first.";
     return;
   }
-  profile = saveProfile({ ...profile, name, avatarId: selectedAvatarId });
+  profile = saveProfile({
+    ...profile,
+    name,
+    avatarId: selectedAvatarId,
+    controlLayout: selectedControlLayout
+  });
+  input.setLayout(profile.controlLayout);
   renderMenuProfile();
   audio.setMusicScene("menu");
   ui.showScreen("menu-screen");
@@ -308,6 +364,14 @@ function updateProfilePreview() {
   document.querySelector("#profile-preview").src = avatarDataUri(selectedAvatarId);
 }
 
+function renderControlLayoutOptions() {
+  for (const button of document.querySelectorAll("[data-control-layout]")) {
+    const selected = button.dataset.controlLayout === selectedControlLayout;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-checked", String(selected));
+  }
+}
+
 function renderMenuProfile() {
   document.querySelector("#menu-profile-name").textContent = profile.name;
   document.querySelector("#menu-profile-avatar").src = avatarDataUri(profile.avatarId);
@@ -323,9 +387,40 @@ function showStory() {
   multiplayer.leave();
   selectedStoryLevel = getStoryLevel(Math.min(selectedStoryLevel.number, profile.unlockedLevel));
   renderStoryMap();
+  renderRelicLoadout();
   selectStoryLevel(selectedStoryLevel.number);
   ui.showScreen("story-screen");
   audio.setMusicScene("story-map", selectedStoryLevel.chapter);
+}
+
+function renderRelicLoadout() {
+  const slots = relicSlotCount(profile);
+  const unlocked = new Set(profile.unlockedRelics ?? []);
+  const equipped = profile.equippedRelics ?? [];
+  document.querySelector("#relic-slot-status").textContent =
+    `${slots} relic ${slots === 1 ? "slot" : "slots"}`;
+  document.querySelector("#relic-slots").innerHTML = Array.from({ length: slots }, (_, index) => {
+    const relic = getRelic(equipped[index]);
+    return relic
+      ? `<div class="relic-slot filled"><img src="${relic.icon}" alt=""><span><small>Slot ${index + 1}</small><strong>${relic.name}</strong></span></div>`
+      : `<div class="relic-slot"><span class="empty-relic">+</span><span><small>Slot ${index + 1}</small><strong>Empty</strong></span></div>`;
+  }).join("");
+  document.querySelector("#relic-collection").innerHTML = RELICS.map((relic) => {
+    const isUnlocked = unlocked.has(relic.id);
+    const isEquipped = equipped.includes(relic.id);
+    return `<button class="relic-card ${isEquipped ? "equipped" : ""} ${isUnlocked ? "" : "locked"}"
+      data-relic="${relic.id}" ${isUnlocked ? "" : "disabled"}
+      aria-pressed="${isEquipped}" title="${escapeHtml(relic.description)}">
+      <img src="${relic.icon}" alt="">
+      <span><strong>${relic.name}</strong><small>${isUnlocked
+        ? relic.description
+        : `Win Story Level ${relic.unlockLevel} to unlock`}</small></span>
+      <b>${isEquipped ? "Equipped" : isUnlocked ? "Equip" : "Locked"}</b>
+    </button>`;
+  }).join("");
+  document.querySelector("#relic-loadout-note").textContent = slots === 1
+    ? "Relics affect Story Mode only. Complete the First Vault to unlock a second slot."
+    : "Two slots unlocked. Relics affect Story Mode only, keeping ranked online matches even.";
 }
 
 function renderStoryMap() {
@@ -380,6 +475,10 @@ function selectStoryLevel(levelNumber) {
   document.querySelector("#story-music-title").textContent = music.title;
   document.querySelector("#story-music-detail").textContent = music.description;
   document.querySelector("#story-reward").textContent = selectedStoryLevel.reward;
+  const rewardRelic = relicForLevel(selectedStoryLevel.number);
+  document.querySelector("#story-reward-detail").textContent = rewardRelic
+    ? rewardRelic.description
+    : "A campaign keepsake recorded in your journey.";
   const bestStars = Number(profile.storyStars?.[selectedStoryLevel.number] ?? 0);
   document.querySelector("#story-objectives").innerHTML = storyObjectiveLabels(selectedStoryLevel).map((objective, index) => (
     `<span class="${index < bestStars ? "earned" : ""}"><b>&#9733;</b>${objective}</span>`
@@ -822,6 +921,7 @@ function onlineHandlers() {
       game.setOnlineTarget(target, avatarDataUri(target.avatarId));
     },
     onAttack: (attack) => game.receiveAttack(attack),
+    onEmote: (emote) => ui.showEmote("enemy", emote.text, emote.senderName),
     onResult: async ({ place, totalPlayers, won, roomCode, playerId, finishedAt }) => {
       const summary = game.getBattleSummary(won);
       const medals = battleMedals(summary, won);

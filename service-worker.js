@@ -1,4 +1,4 @@
-const CACHE_NAME = "rune-rivals-v19";
+const CACHE_NAME = "rune-rivals-v20";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,8 @@ const APP_SHELL = [
   "./src/pwa.js",
   "./src/constants.js",
   "./src/profile.js",
+  "./src/relics.js",
+  "./src/emotes.js",
   "./src/story.js",
   "./src/audio.js",
   "./src/codex.js",

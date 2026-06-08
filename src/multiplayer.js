@@ -1,5 +1,6 @@
 import { hasFirebaseConfig } from "./firebase-config.js";
 import { initializeFirebase } from "./firebase.js";
+import { getOnlineEmote } from "./emotes.js";
 import {
   buildPublicLobbyListing,
   disconnectedTooLong,
@@ -25,6 +26,7 @@ export class MultiplayerClient {
     this.unsubscribers = [];
     this.disconnectTimers = new Map();
     this.processedAttacks = new Set();
+    this.processedEmotes = new Set();
     this.matchStarted = false;
     this.resultDelivered = false;
     this.currentTargetId = "";
@@ -242,6 +244,7 @@ export class MultiplayerClient {
     const token = this.sessionToken;
     const roomPath = `rooms/${this.roomCode}`;
     const attacksRef = ref(this.db, `${roomPath}/attacks/${this.playerId}`);
+    const emotesRef = ref(this.db, `${roomPath}/emotes`);
     this.handlers = handlers;
     this.roomMeta = {
       status: undefined,
@@ -284,6 +287,18 @@ export class MultiplayerClient {
         .then(() => handlers.onAttack?.(snapshot.val()))
         .catch((error) => console.error("Could not apply online attack.", error))
         .finally(() => remove(snapshot.ref).catch(() => {}));
+    }));
+
+    this.unsubscribers.push(onChildAdded(emotesRef, (snapshot) => {
+      if (token !== this.sessionToken || this.processedEmotes.has(snapshot.key)) return;
+      this.processedEmotes.add(snapshot.key);
+      if (this.processedEmotes.size > 100) {
+        this.processedEmotes.delete(this.processedEmotes.values().next().value);
+      }
+      const emote = snapshot.val();
+      if (emote?.senderId !== this.playerId && getOnlineEmote(emote?.emoteId)) {
+        handlers.onEmote?.(emote);
+      }
     }));
   }
 
@@ -354,6 +369,7 @@ export class MultiplayerClient {
       [`${roomPath}/winnerId`]: null,
       [`${roomPath}/states`]: null,
       [`${roomPath}/attacks`]: null,
+      [`${roomPath}/emotes`]: null,
       [`publicLobbies/${this.roomCode}`]: null
     };
     for (const player of roomPlayers(room)) {
@@ -407,6 +423,21 @@ export class MultiplayerClient {
       attackerName: this.latestRoom?.players?.[this.playerId]?.name ?? "Rival",
       sentAt: Date.now()
     });
+  }
+
+  async sendEmote(emoteId) {
+    const emote = getOnlineEmote(emoteId);
+    if (!emote || !this.db || !this.roomCode || !this.playerId || !this.matchStarted) return false;
+    const { ref, push, remove } = this.api;
+    const emoteRef = await push(ref(this.db, `rooms/${this.roomCode}/emotes`), {
+      emoteId: emote.id,
+      text: emote.text,
+      senderId: this.playerId,
+      senderName: this.latestRoom?.players?.[this.playerId]?.name ?? "Rival",
+      sentAt: Date.now()
+    });
+    globalThis.setTimeout(() => remove(emoteRef).catch(() => {}), 8000);
+    return true;
   }
 
   async reportElimination() {
@@ -734,6 +765,7 @@ export class MultiplayerClient {
     this.matchStarted = false;
     this.resultDelivered = false;
     this.processedAttacks.clear();
+    this.processedEmotes.clear();
     this.lastPublicLobbyFingerprint = "";
     this.resetStateSync();
   }

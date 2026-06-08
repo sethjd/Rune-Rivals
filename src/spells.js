@@ -19,7 +19,17 @@ export function applyDamage(fighter, amount) {
   return amount - blocked;
 }
 
-export function castSpell(type, combo, caster, target, casterBoard, targetBoard, matchSize = 3, powerScale = 1) {
+export function castSpell(
+  type,
+  combo,
+  caster,
+  target,
+  casterBoard,
+  targetBoard,
+  matchSize = 3,
+  powerScale = 1,
+  options = {}
+) {
   const multiplier = comboMultiplier(combo) * matchSizeMultiplier(matchSize) * powerScale;
   const result = {
     type,
@@ -60,7 +70,11 @@ export function castSpell(type, combo, caster, target, casterBoard, targetBoard,
         junk: Math.max(1, Math.round(SPELL_VALUES.lightningJunk * multiplier))
       };
       applyDamage(target, result.attack.damage);
-      result.overflowed = targetBoard.addJunk(result.attack.junk);
+      if (options.blockJunk) {
+        result.junkBlocked = true;
+      } else {
+        result.overflowed = targetBoard.addJunk(result.attack.junk);
+      }
       break;
     case "shadow":
       result.attack = {
@@ -70,7 +84,11 @@ export function castSpell(type, combo, caster, target, casterBoard, targetBoard,
         junk: Math.round(SPELL_VALUES.shadowJunk * multiplier)
       };
       applyDamage(target, result.attack.damage);
-      target.junkQueue += result.attack.junk;
+      if (options.blockJunk) {
+        result.junkBlocked = true;
+      } else {
+        target.junkQueue += result.attack.junk;
+      }
       break;
     default:
       break;

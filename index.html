@@ -200,6 +200,26 @@
           </div>
           <p class="avatar-instruction">Choose an avatar</p>
           <div id="avatar-grid" class="avatar-grid" role="radiogroup" aria-label="Choose an avatar"></div>
+          <section class="control-settings" aria-labelledby="control-settings-title">
+            <div>
+              <p class="eyebrow">Mobile comfort</p>
+              <h3 id="control-settings-title">Control Layout</h3>
+            </div>
+            <div id="control-layout-options" class="control-layout-options" role="radiogroup" aria-label="Mobile control layout">
+              <button data-control-layout="classic" role="radio">
+                <strong>Classic buttons</strong><small>Centered two-row controls</small>
+              </button>
+              <button data-control-layout="swipe" role="radio">
+                <strong>Swipe mode</strong><small>Gesture controls on your board</small>
+              </button>
+              <button data-control-layout="left" role="radio">
+                <strong>Left-handed</strong><small>Important controls begin on the left</small>
+              </button>
+              <button data-control-layout="large" role="radio">
+                <strong>Bigger buttons</strong><small>Larger, easier touch targets</small>
+              </button>
+            </div>
+          </section>
           <p id="profile-message" class="form-message"></p>
           <div class="row-actions">
             <button class="primary-button" data-action="save-profile">Save Profile</button>
@@ -222,6 +242,18 @@
           <div class="story-path" aria-hidden="true"></div>
           <div id="story-levels" class="story-levels"></div>
         </div>
+        <section class="panel story-relic-loadout" aria-labelledby="story-relic-title">
+          <header>
+            <div>
+              <p class="eyebrow">Campaign rewards</p>
+              <h3 id="story-relic-title">Relic Loadout</h3>
+            </div>
+            <strong id="relic-slot-status">1 relic slot</strong>
+          </header>
+          <div id="relic-slots" class="relic-slots" aria-label="Equipped relics"></div>
+          <div id="relic-collection" class="relic-collection"></div>
+          <p id="relic-loadout-note">Relics affect Story Mode only. Complete the First Vault to unlock a second slot.</p>
+        </section>
         <div id="story-detail" class="panel story-detail">
           <img id="story-opponent-avatar" src="./assets/portraits/kael.svg" alt="">
           <div class="story-detail-copy">
@@ -240,8 +272,9 @@
             <span>Chapter Theme</span>
             <strong id="story-music-title">Roads Remember</strong>
             <p id="story-music-detail" class="story-music-detail">Warm strings, wooden pulse, and an old travelling melody.</p>
-            <span>Relic</span>
+            <span>Reward</span>
             <strong id="story-reward">Roadwarden's Mark</strong>
+            <p id="story-reward-detail" class="story-reward-detail">Start each Story duel with 10% Arcane Surge.</p>
             <button id="story-play-button" class="primary-button" data-action="play-story">Begin Duel</button>
           </div>
         </div>
@@ -314,7 +347,8 @@
             <div><img src="./assets/runes/shadow.svg" alt=""><b>Shadow</b><span>3 delayed junk</span></div>
           </div>
           <p><b>Keyboard:</b> arrows move and rotate, Space hard drops, C holds a piece, S casts Arcane Surge, and P pauses.</p>
-          <p><b>Touch:</b> the centered controls below the boards include move, spin, soft drop, Hold, Drop, and Surge.</p>
+            <p><b>Touch:</b> choose Classic, Swipe, Left-handed, or Bigger buttons in your profile. In Swipe mode, tap your board to spin, swipe sideways to move, swipe down to soft drop, and flick down to hard drop. Hold and Surge stay as buttons.</p>
+            <p><b>Story relics:</b> complete marked levels to earn permanent powers. Equip one relic at first; completing the First Vault unlocks a second slot.</p>
           <button class="primary-button" data-action="back-menu">Got it</button>
         </div>
       </section>
@@ -332,6 +366,7 @@
             <button class="icon-button" data-action="pause" aria-label="Pause game">II</button>
           </div>
         </header>
+        <div id="active-relics" class="active-relics hidden" aria-label="Equipped story relics"></div>
         <div id="danger-alert" class="danger-alert" aria-live="polite">BOARD BREACH RISK</div>
 
         <div class="arena">
@@ -389,6 +424,15 @@
         </div>
         <div id="combat-float-layer" class="combat-float-layer" aria-hidden="true"></div>
         <div id="combo-banner" class="combo-banner"></div>
+        <div id="relic-banner" class="relic-banner" aria-live="polite"></div>
+        <div id="player-emote" class="battle-emote player-emote" aria-live="polite"></div>
+        <div id="enemy-emote" class="battle-emote enemy-emote" aria-live="polite"></div>
+        <nav id="online-emotes" class="online-emotes hidden" aria-label="Quick online emotes">
+          <button data-emote="good-luck">Good luck</button>
+          <button data-emote="nice-chain">Nice chain!</button>
+          <button data-emote="ouch">Ouch</button>
+          <button data-emote="rematch">Rematch?</button>
+        </nav>
         <div id="pause-overlay" class="game-overlay hidden">
           <div class="panel">
             <h2>Battle Paused</h2>
@@ -398,6 +442,7 @@
         </div>
 
         <nav class="touch-controls" aria-label="Game controls">
+          <p class="swipe-control-hint">Tap to spin · swipe to move · swipe down to drop · flick down to slam</p>
           <button class="move-left" data-control="left" aria-label="Move left">&larr;</button>
           <button class="spin-control" data-control="rotate" aria-label="Spin piece">&#8635;<small>SPIN</small></button>
           <button class="move-right" data-control="right" aria-label="Move right">&rarr;</button>

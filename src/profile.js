@@ -1,3 +1,9 @@
+import {
+  normalizeEquippedRelics,
+  relicForLevel,
+  unlockedRelicIds
+} from "./relics.js";
+
 const PROFILE_KEY = "rune-rivals-profile-v1";
 const XP_PER_LEVEL = 180;
 
@@ -35,6 +41,9 @@ export function loadProfile() {
     unlockedLevel: 1,
     completedLevels: [],
     storyStars: {},
+    unlockedRelics: [],
+    equippedRelics: [],
+    controlLayout: "classic",
     xp: 0,
     wins: 0,
     onlineWins: 0,
@@ -46,22 +55,33 @@ export function loadProfile() {
 
   try {
     const stored = JSON.parse(localStorage.getItem(PROFILE_KEY));
-    return {
+    const migrated = {
       ...fallback,
       ...stored,
       completedLevels: Array.isArray(stored?.completedLevels) ? stored.completedLevels : [],
-      storyStars: stored?.storyStars && typeof stored.storyStars === "object" ? stored.storyStars : {}
+      storyStars: stored?.storyStars && typeof stored.storyStars === "object" ? stored.storyStars : {},
+      controlLayout: normalizeControlLayout(stored?.controlLayout)
     };
+    migrated.unlockedRelics = unlockedRelicIds(migrated.completedLevels, stored?.unlockedRelics);
+    migrated.equippedRelics = normalizeEquippedRelics(migrated);
+    if (!migrated.equippedRelics.length && migrated.unlockedRelics.length) {
+      migrated.equippedRelics = [migrated.unlockedRelics[0]];
+    }
+    return migrated;
   } catch {
     return fallback;
   }
 }
 
 export function saveProfile(profile) {
-  const clean = {
+  const prepared = {
     ...profile,
-    name: String(profile.name || "Player").trim().slice(0, 16) || "Player"
+    name: String(profile.name || "Player").trim().slice(0, 16) || "Player",
+    controlLayout: normalizeControlLayout(profile.controlLayout)
   };
+  prepared.unlockedRelics = unlockedRelicIds(prepared.completedLevels, prepared.unlockedRelics);
+  prepared.equippedRelics = normalizeEquippedRelics(prepared);
+  const clean = prepared;
   localStorage.setItem(PROFILE_KEY, JSON.stringify(clean));
   return clean;
 }
@@ -73,10 +93,20 @@ export function completeStoryLevel(profile, levelNumber, stars = 1) {
     ...(profile.storyStars ?? {}),
     [levelNumber]: Math.max(profile.storyStars?.[levelNumber] ?? 0, stars)
   };
+  const relic = relicForLevel(levelNumber);
+  const unlockedRelics = unlockedRelicIds(
+    [...completed],
+    [...(profile.unlockedRelics ?? []), ...(relic ? [relic.id] : [])]
+  );
+  const equippedRelics = profile.equippedRelics?.length
+    ? profile.equippedRelics
+    : unlockedRelics.slice(0, 1);
   return saveProfile({
     ...profile,
     completedLevels: [...completed].sort((a, b) => a - b),
     storyStars,
+    unlockedRelics,
+    equippedRelics,
     unlockedLevel: Math.max(profile.unlockedLevel, Math.min(20, levelNumber + 1))
   });
 }
@@ -134,6 +164,10 @@ export function getAvatar(id) {
 export function avatarDataUri(id) {
   const avatar = getAvatar(id);
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(avatarSvg(avatar))}`;
+}
+
+export function normalizeControlLayout(value) {
+  return ["classic", "swipe", "left", "large"].includes(value) ? value : "classic";
 }
 
 function avatarSvg(avatar) {
